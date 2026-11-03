@@ -6,8 +6,6 @@
 
 const app = db.getSiblingDB("consentio");
 const auditoria = db.getSiblingDB("consentio_auditoria");
-const crypto = require("crypto");
-const sha256 = (txt) => crypto.createHash("sha256").update(txt).digest("hex");
 
 // IDs fixos para que as referências entre coleções fiquem consistentes
 const id = {
@@ -243,7 +241,7 @@ app.documentos.insertMany([
     modelo: { id: id.mod_toxina, titulo: "Termo de Consentimento — Toxina Botulínica", versao: 3 },
     conteudo_renderizado: texto1, status: "assinado",
     assinatura: { assinado_em: ISODate("2026-10-28T15:05:00Z"), metodo: "presencial_tablet", ip: "177.10.20.30" },
-    hash_sha256: sha256(texto1), gerado_em: ISODate("2026-10-28T14:55:00Z"),
+    hash_sha256: "62644f687e6ee0b0e0e3032738abac4d4d1d2513279c38b373750eb07113d8e7", gerado_em: ISODate("2026-10-28T14:55:00Z"),
   },
   {
     _id: id.doc2, clinica_id: id.clinica_sorriso, paciente_id: id.pac_carlos, profissional_id: id.dr_lucas,
@@ -251,14 +249,14 @@ app.documentos.insertMany([
     modelo: { id: id.mod_canal, titulo: "Termo de Consentimento — Tratamento Endodôntico", versao: 1 },
     conteudo_renderizado: texto2, status: "assinado",
     assinatura: { assinado_em: ISODate("2026-10-30T11:50:00Z"), metodo: "presencial_papel" },
-    hash_sha256: sha256(texto2), gerado_em: ISODate("2026-10-30T11:40:00Z"),
+    hash_sha256: "6825460ecd668106742a7c5563464a0a82891befa9b71e705f09d921291be413", gerado_em: ISODate("2026-10-30T11:40:00Z"),
   },
   {
     _id: id.doc3, clinica_id: id.clinica_sorriso, paciente_id: id.pac_carlos, profissional_id: id.dr_lucas,
     procedimento_id: id.proc_exodontia,
     modelo: { id: id.mod_exodontia, titulo: "Termo de Consentimento — Exodontia", versao: 2 },
     conteudo_renderizado: texto3, status: "enviado",
-    hash_sha256: sha256(texto3), gerado_em: ISODate("2026-11-03T12:15:00Z"),
+    hash_sha256: "904060c09cde36416ea258dd1fba1adc11bc4861723c074dc604c75814e79b9d", gerado_em: ISODate("2026-11-03T12:15:00Z"),
   },
 ]);
 
