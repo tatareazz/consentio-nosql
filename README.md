@@ -105,7 +105,22 @@ A auditoria fica em um banco separado para isolar permissões (a aplicação só
 
 ---
 
-## 4. Como executar no MongoDB Atlas
+## 4. Funcionalidades com pipelines de agregação (Atividade A2)
+
+Estão no final de `scripts/03_consultas_exemplo.js`.
+
+| # | Funcionalidade | Coleção(ões) | Etapas do pipeline |
+|---|---|---|---|
+| 1 | **Top 5 alergias mais comuns** — ajuda a clínica a se preparar (ex.: luvas sem látex, evitar certos medicamentos) | `pacientes` | `$match` → `$unwind` → `$group` (`$sum`) → `$sort` → `$limit` → `$project` |
+| 2 | **Relatório de documentos com contato do paciente** — mostra o status de cada termo e o telefone do paciente para a recepção cobrar assinaturas pendentes | `documentos` + `pacientes` | `$lookup` → `$unwind` → `$sort` → `$project` |
+
+### Por que os dois pipelines são bem diferentes
+
+O primeiro pipeline trabalha **dentro de uma única coleção** e processa um **array embutido** no próprio documento: o `$unwind` desmembra `ficha.anamnese.alergias`, transformando um paciente com N alergias em N documentos temporários, e o `$group` com `$sum` agrega esses documentos para contar as ocorrências. Ele aproveita a modelagem por **embedding**, já que as alergias moram dentro do paciente e nenhuma outra coleção é consultada. O segundo pipeline faz o caminho oposto: cruza **duas coleções** por **referência**. O `$lookup` usa o `paciente_id` guardado em `documentos` para buscar o paciente correspondente em `pacientes`, como um JOIN do SQL. Aqui o `$unwind` só converte o array de 1 elemento que o `$lookup` devolve em um objeto, e o `$project` remodela a saída, escondendo os ObjectIds. Em resumo, o primeiro **multiplica e reduz documentos** para gerar estatística (N → muitos → 5 grupos), enquanto o segundo **enriquece cada documento** com dados de outra coleção, mantendo a mesma quantidade de linhas (1 → 1).
+
+---
+
+## 5. Como executar no MongoDB Atlas
 
 ### Pré‑requisitos
 - Um cluster no [MongoDB Atlas](https://www.mongodb.com/atlas) (o gratuito M0 serve).
@@ -140,14 +155,14 @@ Também dá para rodar pelo **mongosh embutido no MongoDB Compass**: abra o shel
 
 ---
 
-## 5. Estrutura do repositório
+## 6. Estrutura do repositório
 ```
 .
 ├── README.md                     # descrição do sistema e da modelagem
 └── scripts/
     ├── 01_criar_estrutura.js     # cria bancos, coleções, validações e índices
     ├── 02_inserir_exemplos.js    # insere documentos de exemplo
-    └── 03_consultas_exemplo.js   # consultas e agregações de demonstração
+    └── 03_consultas_exemplo.js   # consultas e agregações (inclui as 2 da A2)
 ```
 
 > Os dados de exemplo são fictícios. Os modelos de documento do Consentio não substituem orientação jurídica individualizada.

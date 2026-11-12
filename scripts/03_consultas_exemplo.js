@@ -68,3 +68,76 @@ try {
 } catch (e) {
   print("Rejeitado pelo $jsonSchema, como esperado: " + e.message.split("\n")[0]);
 }
+
+// =====================================================================
+// ATIVIDADE A2 — 2 funcionalidades com pipelines de agregação diferentes
+// =====================================================================
+
+// ---------------------------------------------------------------------
+// Funcionalidade 1: Top 5 alergias mais comuns entre os pacientes
+// Tipo de pipeline: DESMEMBRAMENTO de array embutido (uma só coleção)
+// Utilidade: ajuda a clínica a prever cuidados e materiais
+// (ex.: luvas sem látex, evitar dipirona).
+// ---------------------------------------------------------------------
+titulo("A2.1 Top 5 alergias mais comuns ($unwind + $group)");
+console.log("Coleção: pacientes | Etapas: $match → $unwind → $group → $sort → $limit → $project\n");
+
+const estatisticaAlergias = app.pacientes.aggregate([
+  // 1) Só pacientes que têm pelo menos uma alergia registrada
+  { $match: { "ficha.anamnese.alergias.0": { $exists: true } } },
+
+  // 2) Quebra o array: um paciente com 2 alergias vira 2 documentos
+  { $unwind: "$ficha.anamnese.alergias" },
+
+  // 3) Agrupa por alergia e conta quantos pacientes têm cada uma
+  { $group: { _id: { $toLower: "$ficha.anamnese.alergias" }, total_pacientes: { $sum: 1 } } },
+
+  // 4) Ordena da mais comum para a menos comum (desempate alfabético)
+  { $sort: { total_pacientes: -1, _id: 1 } },
+
+  // 5) Mantém apenas as 5 primeiras
+  { $limit: 5 },
+
+  // 6) Renomeia o _id para ficar legível
+  { $project: { _id: 0, alergia: "$_id", total_pacientes: 1 } },
+]).toArray();
+
+printjson(estatisticaAlergias);
+
+// ---------------------------------------------------------------------
+// Funcionalidade 2: Relatório de documentos com contato do paciente
+// Tipo de pipeline: PONTE / JOIN entre duas coleções
+// Utilidade: a recepção vê quais termos ainda não foram assinados
+// e já tem o telefone para cobrar o paciente.
+// ---------------------------------------------------------------------
+titulo("A2.2 Relatório de documentos com contato do paciente ($lookup)");
+console.log("Coleções: documentos + pacientes | Etapas: $lookup → $unwind → $sort → $project\n");
+
+const relatorioDocumentos = app.documentos.aggregate([
+  // 1) JOIN: busca na coleção pacientes o documento cujo _id = paciente_id
+  { $lookup: {
+      from: "pacientes",
+      localField: "paciente_id",
+      foreignField: "_id",
+      as: "dados_paciente",
+  } },
+
+  // 2) O $lookup devolve um array; o $unwind transforma em objeto único
+  { $unwind: "$dados_paciente" },
+
+  // 3) Mais recentes primeiro
+  { $sort: { gerado_em: -1 } },
+
+  // 4) Esconde os ObjectIds e mostra só o que interessa
+  { $project: {
+      _id: 0,
+      status_documento: "$status",
+      documento: "$modelo.titulo",
+      data_geracao: "$gerado_em",
+      paciente_nome: "$dados_paciente.nome",
+      paciente_cpf: { $ifNull: ["$dados_paciente.cpf", "não informado"] },
+      paciente_telefone: { $ifNull: ["$dados_paciente.contato.telefone", "não informado"] },
+  } },
+]).toArray();
+
+printjson(relatorioDocumentos);
