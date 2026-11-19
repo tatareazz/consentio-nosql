@@ -1,0 +1,39 @@
+# =====================================================================
+# Bloom Filter e Count-Min Sketch NATIVOS (módulo RedisBloom)
+# Precisa de: Redis 8, Redis Stack ou Redis Cloud (todos já trazem o módulo).
+# Executar tudo:  node cli/executar.js cli/03_bloom_cms_redisstack.redis   (ou: npm run cli:stack)
+# Com redis-cli:  grep -v '^#' cli/03_bloom_cms_redisstack.redis | redis-cli
+# Num Redis "puro" (ex.: 7.x sem módulos) estes comandos dão
+# "unknown command" — nesse caso use cli/04_bloom_cms_sem_modulo.redis
+# ou rode o demo em Node, que detecta isso sozinho.
+# =====================================================================
+
+# Começa do zero
+DEL consentio:cli:bf:emails consentio:cli:bf:cpfs:65b000000000000000000001 consentio:cli:cms:eventos:2026-11-19 consentio:cli:cms:eventos:2026-11-20
+
+# ---------------- BLOOM FILTER: e-mails já cadastrados ----------------
+# BF.RESERVE chave taxa_de_erro capacidade
+BF.RESERVE consentio:cli:bf:emails 0.01 10000
+BF.MADD consentio:cli:bf:emails mayra@sorrisopleno.com.br lucas@sorrisopleno.com.br recepcao@sorrisopleno.com.br paula.lima.odonto@email.com
+# 1 = "talvez exista" (confirmar no MongoDB) | 0 = "com certeza não existe"
+BF.EXISTS consentio:cli:bf:emails mayra@sorrisopleno.com.br
+BF.EXISTS consentio:cli:bf:emails nova.dentista@gmail.com
+BF.INFO consentio:cli:bf:emails
+
+# Outro uso: CPF já cadastrado na clínica (antes do insert no MongoDB)
+BF.RESERVE consentio:cli:bf:cpfs:65b000000000000000000001 0.001 50000
+BF.ADD consentio:cli:bf:cpfs:65b000000000000000000001 123.456.789-09
+BF.EXISTS consentio:cli:bf:cpfs:65b000000000000000000001 123.456.789-09
+BF.EXISTS consentio:cli:bf:cpfs:65b000000000000000000001 000.000.000-00
+
+# ---------------- COUNT-MIN SKETCH: ações disparadas no dia ----------------
+# CMS.INITBYDIM chave largura profundidade
+CMS.INITBYDIM consentio:cli:cms:eventos:2026-11-19 2000 5
+CMS.INCRBY consentio:cli:cms:eventos:2026-11-19 documento_gerado 1 agenda_consultada 1 ficha_aberta 1
+CMS.INCRBY consentio:cli:cms:eventos:2026-11-19 documento_gerado 1 documento_gerado@14h 1 agenda_consultada 5
+CMS.QUERY consentio:cli:cms:eventos:2026-11-19 documento_gerado agenda_consultada ficha_aberta odontograma_aberto
+CMS.INFO consentio:cli:cms:eventos:2026-11-19
+
+# Alternativa: definir por erro/probabilidade em vez de largura/profundidade
+# CMS.INITBYPROB chave erro probabilidade  → erro 0,1% com 99% de confiança
+CMS.INITBYPROB consentio:cli:cms:eventos:2026-11-20 0.001 0.01

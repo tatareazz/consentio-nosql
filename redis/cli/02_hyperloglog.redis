@@ -1,0 +1,28 @@
+# =====================================================================
+# HyperLogLog — funciona em QUALQUER Redis (comando nativo)
+# Executar tudo:  node cli/executar.js cli/02_hyperloglog.redis   (ou: npm run cli:hll)
+# Com redis-cli:  grep -v '^#' cli/02_hyperloglog.redis | redis-cli
+# =====================================================================
+
+# Começa do zero (chaves próprias deste teste)
+DEL consentio:cli:hll:ativos:2026-11-18 consentio:cli:hll:ativos:2026-11-19 consentio:cli:hll:ativos:semana-47 consentio:cli:hll:pacientes:65b000000000000000000001:2026-11-19
+
+# Usuários ativos únicos por dia (o mesmo usuário várias vezes conta 1)
+PFADD consentio:cli:hll:ativos:2026-11-18 u1 u2 u3 u1 u1 u4
+PFADD consentio:cli:hll:ativos:2026-11-19 u2 u3 u5 u6 u2
+PFCOUNT consentio:cli:hll:ativos:2026-11-18
+PFCOUNT consentio:cli:hll:ativos:2026-11-19
+
+# União dos dias (semana) sem contar o mesmo usuário duas vezes → 6
+PFMERGE consentio:cli:hll:ativos:semana-47 consentio:cli:hll:ativos:2026-11-18 consentio:cli:hll:ativos:2026-11-19
+PFCOUNT consentio:cli:hll:ativos:semana-47
+
+# Pacientes únicos atendidos por clínica no dia
+PFADD consentio:cli:hll:pacientes:65b000000000000000000001:2026-11-19 65d000000000000000000001 65d000000000000000000002 65d000000000000000000001
+PFCOUNT consentio:cli:hll:pacientes:65b000000000000000000001:2026-11-19
+
+# Memória ocupada (máximo ~12 KB, não importa quantos itens)
+MEMORY USAGE consentio:cli:hll:ativos:semana-47
+
+# Estatística diária expira em 90 dias
+EXPIRE consentio:cli:hll:ativos:2026-11-19 7776000

@@ -1,6 +1,12 @@
-# Consentio — Modelagem NoSQL (MongoDB)
+# Consentio — Bancos de dados NoSQL (MongoDB + Redis)
 
-Repositório da atividade de NoSQL: descrição do sistema **Consentio** e scripts que criam os bancos, as coleções (com validação de esquema e índices) e documentos de exemplo no **MongoDB Atlas**.
+Repositório das atividades de NoSQL do sistema **Consentio**:
+
+| Atividade | Banco NoSQL | Tipo | O que foi feito |
+|---|---|---|---|
+| A1 | MongoDB Atlas | Documentos | Descrição do sistema, bancos, coleções com validação e índices, documentos de exemplo |
+| A2 | MongoDB Atlas | Documentos | 2 funcionalidades com pipelines de agregação diferentes |
+| A3 | Redis | Chave-valor em memória | Cache de login de usuário e estatísticas com Bloom Filter, HyperLogLog e Count-Min Sketch |
 
 Site do sistema: https://consentio.com.br
 
@@ -42,8 +48,8 @@ Desenvolvido por três profissionais com perfis complementares: tecnologia e est
 
 ## 2. Por que MongoDB
 
-- **Documentos de tamanho e forma variáveis**: a ficha do paciente, um odontograma e um mapa de toxina têm estruturas muito diferentes; o modelo de documentos acomoda isso sem dezenas de tabelas.
-- **Dados embutidos lidos juntos**: anamnese, endereço e contato são sempre lidos com o paciente, então ficam embutidos (*embedding*), evitando *joins*.
+- **Documentos de tamanho e forma variáveis**: a ficha do paciente, um odontograma e um mapa de toxina têm estruturas muito diferentes; o modelo de documentos acomoda isso com esquema flexível, cada coleção guardando documentos no formato que o dado realmente tem.
+- **Dados embutidos lidos juntos**: anamnese, endereço e contato são sempre lidos com o paciente, então ficam embutidos (*embedding*) e chegam em uma única leitura do documento, sem precisar buscar em outras coleções.
 - **Snapshot dos documentos gerados**: o documento gerado guarda uma cópia do modelo (título, versão e texto final). Se o modelo mudar depois, o documento já assinado continua íntegro — importante para valor jurídico.
 - **Multi‑tenant simples**: todas as coleções de dados de clínica têm `clinica_id`, com índices compostos começando por ele.
 
@@ -116,7 +122,7 @@ Estão no final de `scripts/03_consultas_exemplo.js`.
 
 ### Por que os dois pipelines são bem diferentes
 
-O primeiro pipeline trabalha **dentro de uma única coleção** e processa um **array embutido** no próprio documento: o `$unwind` desmembra `ficha.anamnese.alergias`, transformando um paciente com N alergias em N documentos temporários, e o `$group` com `$sum` agrega esses documentos para contar as ocorrências. Ele aproveita a modelagem por **embedding**, já que as alergias moram dentro do paciente e nenhuma outra coleção é consultada. O segundo pipeline faz o caminho oposto: cruza **duas coleções** por **referência**. O `$lookup` usa o `paciente_id` guardado em `documentos` para buscar o paciente correspondente em `pacientes`, como um JOIN do SQL. Aqui o `$unwind` só converte o array de 1 elemento que o `$lookup` devolve em um objeto, e o `$project` remodela a saída, escondendo os ObjectIds. Em resumo, o primeiro **multiplica e reduz documentos** para gerar estatística (N → muitos → 5 grupos), enquanto o segundo **enriquece cada documento** com dados de outra coleção, mantendo a mesma quantidade de linhas (1 → 1).
+O primeiro pipeline trabalha **dentro de uma única coleção** e processa um **array embutido** no próprio documento: o `$unwind` desmembra `ficha.anamnese.alergias`, transformando um paciente com N alergias em N documentos temporários, e o `$group` com `$sum` agrega esses documentos para contar as ocorrências. Ele aproveita a modelagem por **embedding**, já que as alergias moram dentro do paciente e nenhuma outra coleção é consultada. O segundo pipeline faz o caminho oposto: cruza **duas coleções** por **referência**. O `$lookup` usa o `paciente_id` guardado em `documentos` para buscar o paciente correspondente em `pacientes` (junção de coleções por referência, feita pelo próprio MongoDB). Aqui o `$unwind` só converte o array de 1 elemento que o `$lookup` devolve em um objeto, e o `$project` remodela a saída, escondendo os ObjectIds. Em resumo, o primeiro **multiplica e reduz documentos** para gerar estatística (N → muitos → 5 grupos), enquanto o segundo **enriquece cada documento** com dados de outra coleção, mantendo a mesma quantidade de documentos (1 → 1).
 
 ---
 
@@ -155,14 +161,85 @@ Também dá para rodar pelo **mongosh embutido no MongoDB Compass**: abra o shel
 
 ---
 
-## 6. Estrutura do repositório
+## 6. Atividade A3 — Redis: cache de login e estatísticas probabilísticas
+
+O MongoDB continua sendo o banco principal. O **Redis** (NoSQL chave-valor, em memória) entra na frente dele para:
+
+1. **Cache de login de usuário:** sessão, perfil e permissões em Hash com TTL, padrão cache-aside, bloqueio após 5 senhas erradas, logout e invalidação. A senha nunca é guardada em texto (hash scrypt).
+2. **Estatísticas de uso com estruturas probabilísticas:**
+
+| Estrutura | Uso no Consentio | Comandos |
+|---|---|---|
+| **Bloom Filter** | E-mail/CPF já cadastrado? Evita consultar o MongoDB quando a resposta é "não" | `BF.RESERVE`, `BF.MADD`, `BF.MEXISTS` (ou `SETBIT`/`GETBIT`) |
+| **HyperLogLog** | Usuários ativos únicos por dia/semana; pacientes únicos por clínica | `PFADD`, `PFCOUNT`, `PFMERGE` |
+| **Count-Min Sketch** | Frequência de ações (termos gerados, fichas abertas, agenda) e horário de pico | `CMS.INITBYDIM`, `CMS.INCRBY`, `CMS.QUERY` (ou `HINCRBY`) |
+
+📄 **Explicação completa, linha por linha, com fluxo e trade-offs:** [`redis/DEFESA_A3.md`](redis/DEFESA_A3.md)
+
+### Resultados medidos (demo)
+- Validação de sessão pelo Redis: **~0,6 ms**, sem consultar o MongoDB; o 2º login não vai ao banco.
+- Bloom Filter (10 mil e-mails, 1%): **0 falsos negativos**, **1,08% de falsos positivos**, 12 KB.
+- HyperLogLog com 100 mil pacientes: **erro 0,37% em 14 KB**, contra **5.442 KB** de um SET exato.
+- Count-Min Sketch com 50 mil eventos: estimativas exatas com largura 2000; superestimativa visível com largura 8.
+
+### Como executar
+
+**1) Ter um Redis rodando** (uma das opções):
+- **Redis Cloud (grátis, recomendado):** crie um banco em https://redis.io/try-free, copie o endereço e a senha. Já vem com Bloom Filter e Count-Min Sketch.
+- **Docker:** `docker run -d --name redis -p 6379:6379 redis/redis-stack-server:latest`
+- **Redis local** (Linux/Mac/WSL): `redis-server`. Sem o módulo RedisBloom, o código usa automaticamente a implementação própria de Bloom e CMS.
+
+**2) Rodar as demos** (Node.js 18+):
+```bash
+cd redis
+npm install
+# Redis Cloud (Linux/Mac):   export REDIS_URL="redis://default:SENHA@HOST:PORTA"
+# Redis Cloud (PowerShell):  $env:REDIS_URL="redis://default:SENHA@HOST:PORTA"
+# Redis local: não precisa definir nada (usa redis://localhost:6379)
+
+npm run login          # Demo 1: cache de login
+npm run estatisticas   # Demo 2: Bloom Filter, HyperLogLog e Count-Min Sketch
+```
+
+**3) Testar comandos direto no Redis** (cada arquivo mostra comando + resposta):
+```bash
+npm run cli:login    # cache de login com HSET/EXPIRE/INCR/DEL
+npm run cli:hll      # HyperLogLog
+npm run cli:stack    # BF.* e CMS.* nativos (Redis Stack / Redis Cloud / Redis 8)
+npm run cli:manual   # Bloom e CMS montados com SETBIT/GETBIT/HINCRBY (qualquer Redis)
+```
+Com o `redis-cli` instalado: `grep -v '^#' cli/01_cache_login.redis | redis-cli -u "$REDIS_URL"`.
+
+> As demos apagam apenas chaves com prefixo `consentio:` (nunca `FLUSHALL`).
+
+---
+
+## 7. Estrutura do repositório
 ```
 .
-├── README.md                     # descrição do sistema e da modelagem
-└── scripts/
-    ├── 01_criar_estrutura.js     # cria bancos, coleções, validações e índices
-    ├── 02_inserir_exemplos.js    # insere documentos de exemplo
-    └── 03_consultas_exemplo.js   # consultas e agregações (inclui as 2 da A2)
+├── README.md                        # descrição do sistema, modelagem e instruções
+├── scripts/                         # MongoDB (A1 e A2)
+│   ├── 01_criar_estrutura.js        # cria bancos, coleções, validações e índices
+│   ├── 02_inserir_exemplos.js       # insere documentos de exemplo
+│   └── 03_consultas_exemplo.js      # consultas e agregações (inclui as 2 da A2)
+└── redis/                           # Redis (A3)
+    ├── DEFESA_A3.md                 # explicação linha por linha, fluxo e trade-offs
+    ├── package.json                 # dependência "redis" e atalhos npm run ...
+    ├── .env.exemplo                 # modelo de REDIS_URL
+    ├── demo_cache_login.js          # Demo 1: cache de login
+    ├── demo_estatisticas.js         # Demo 2: estruturas probabilísticas
+    ├── src/
+    │   ├── conexao.js               # conexão e detecção do módulo RedisBloom
+    │   ├── senha.js                 # hash de senha com scrypt
+    │   ├── banco_principal.js       # usuários (MongoDB simulado para a demo)
+    │   ├── cache_login.js           # login, sessão, logout, bloqueio e invalidação
+    │   └── probabilisticas.js       # Bloom Filter, HyperLogLog, Count-Min Sketch
+    └── cli/
+        ├── executar.js              # roda os .redis mostrando comando + resposta
+        ├── 01_cache_login.redis
+        ├── 02_hyperloglog.redis
+        ├── 03_bloom_cms_redisstack.redis
+        └── 04_bloom_cms_sem_modulo.redis
 ```
 
 > Os dados de exemplo são fictícios. Os modelos de documento do Consentio não substituem orientação jurídica individualizada.

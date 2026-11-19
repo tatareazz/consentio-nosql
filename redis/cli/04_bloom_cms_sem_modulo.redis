@@ -1,0 +1,38 @@
+# =====================================================================
+# Bloom Filter e Count-Min Sketch SEM módulo (qualquer Redis)
+# Mostra, na mão, o que o algoritmo faz por baixo.
+# Executar tudo:  node cli/executar.js cli/04_bloom_cms_sem_modulo.redis   (ou: npm run cli:manual)
+# Com redis-cli:  grep -v '^#' cli/04_bloom_cms_sem_modulo.redis | redis-cli
+#
+# As posições abaixo são exemplos: no código (src/probabilisticas.js)
+# elas saem de funções hash do e-mail/evento.
+# =====================================================================
+
+# Começa do zero
+DEL consentio:cli:bf:demo consentio:cli:cms:demo
+
+# ---------------- BLOOM FILTER com bitmap (SETBIT/GETBIT) ----------------
+# Inserir "mayra@..." = ligar os k bits que os k hashes apontam (aqui k=3)
+SETBIT consentio:cli:bf:demo 1021 1
+SETBIT consentio:cli:bf:demo 40877 1
+SETBIT consentio:cli:bf:demo 77310 1
+# Consultar "mayra@...": todos os bits ligados → "talvez exista"
+GETBIT consentio:cli:bf:demo 1021
+GETBIT consentio:cli:bf:demo 40877
+GETBIT consentio:cli:bf:demo 77310
+# Consultar outro e-mail que cai em 1021, 5000, 77310:
+# o bit 5000 está 0 → "com certeza NÃO existe"
+GETBIT consentio:cli:bf:demo 5000
+# Bits ligados no total
+BITCOUNT consentio:cli:bf:demo
+
+# ---------------- COUNT-MIN SKETCH com HASH (HINCRBY) ----------------
+# Matriz de 2 linhas; campo = "linha:coluna"
+# "documento_gerado" cai na coluna 3 da linha 0 e na coluna 7 da linha 1
+HINCRBY consentio:cli:cms:demo 0:3 1
+HINCRBY consentio:cli:cms:demo 1:7 1
+# "agenda_consultada" colide na linha 0 (coluna 3) mas não na linha 1 (coluna 2)
+HINCRBY consentio:cli:cms:demo 0:3 5
+HINCRBY consentio:cli:cms:demo 1:2 5
+# Estimativa de documento_gerado = MENOR entre os contadores dele → 1 (correto)
+HMGET consentio:cli:cms:demo 0:3 1:7

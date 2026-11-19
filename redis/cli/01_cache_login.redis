@@ -1,0 +1,51 @@
+# =====================================================================
+# Cache de login — comandos para testar direto no redis-cli
+# Executar tudo:  node cli/executar.js cli/01_cache_login.redis   (ou: npm run cli:login)
+# Com redis-cli:  grep -v '^#' cli/01_cache_login.redis | redis-cli
+# (ou colar linha a linha no redis-cli / RedisInsight)
+# =====================================================================
+
+# Começa do zero (apaga só as chaves usadas aqui)
+DEL consentio:usuario:email:mayra@sorrisopleno.com.br consentio:sessao:tok123abc consentio:usuario:65c000000000000000000001:sessoes consentio:login:falhas:recepcao@sorrisopleno.com.br
+
+# --- 1) CACHE MISS: o app buscou o usuário no MongoDB e grava no Redis ---
+# Só o HASH da senha (scrypt), nunca a senha em texto puro.
+HSET consentio:usuario:email:mayra@sorrisopleno.com.br id 65c000000000000000000001 nome "Dra. Mayra Oliveira" papel administrador clinica_id 65b000000000000000000001 ativo true senha_hash "scrypt$<salt>$<hash>"
+EXPIRE consentio:usuario:email:mayra@sorrisopleno.com.br 600
+
+# --- 2) CACHE HIT: próximo login lê direto do Redis ---
+HGETALL consentio:usuario:email:mayra@sorrisopleno.com.br
+TTL consentio:usuario:email:mayra@sorrisopleno.com.br
+
+# --- 3) Senha conferida pelo app → cria a sessão (token aleatório) com TTL de 1 h ---
+HSET consentio:sessao:tok123abc usuario_id 65c000000000000000000001 nome "Dra. Mayra Oliveira" papel administrador clinica_id 65b000000000000000000001 permissoes "pacientes:ler,documentos:gerar,agenda:editar" ip 177.10.20.30
+EXPIRE consentio:sessao:tok123abc 3600
+SADD consentio:usuario:65c000000000000000000001:sessoes tok123abc
+
+# --- 4) Cada requisição: valida a sessão e renova o TTL (expiração deslizante) ---
+HGETALL consentio:sessao:tok123abc
+EXPIRE consentio:sessao:tok123abc 3600
+
+# --- 5) Limite de tentativas: cada senha errada incrementa o contador ---
+INCR consentio:login:falhas:recepcao@sorrisopleno.com.br
+# (o app só faz este EXPIRE na 1ª falha: a janela de 15 min começa ali)
+EXPIRE consentio:login:falhas:recepcao@sorrisopleno.com.br 900
+INCR consentio:login:falhas:recepcao@sorrisopleno.com.br
+INCR consentio:login:falhas:recepcao@sorrisopleno.com.br
+INCR consentio:login:falhas:recepcao@sorrisopleno.com.br
+INCR consentio:login:falhas:recepcao@sorrisopleno.com.br
+# chegou a 5 → o app bloqueia até a chave expirar
+GET consentio:login:falhas:recepcao@sorrisopleno.com.br
+TTL consentio:login:falhas:recepcao@sorrisopleno.com.br
+
+# --- 6) Logout: apaga a sessão ---
+DEL consentio:sessao:tok123abc
+SREM consentio:usuario:65c000000000000000000001:sessoes tok123abc
+EXISTS consentio:sessao:tok123abc
+
+# --- 7) Invalidação (usuário trocou senha no MongoDB): apaga o cache dele ---
+DEL consentio:usuario:email:mayra@sorrisopleno.com.br
+EXISTS consentio:usuario:email:mayra@sorrisopleno.com.br
+
+# --- Ver todas as chaves do Consentio (SCAN não trava o servidor como KEYS) ---
+SCAN 0 MATCH consentio:* COUNT 100

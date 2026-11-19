@@ -106,7 +106,7 @@ printjson(estatisticaAlergias);
 
 // ---------------------------------------------------------------------
 // Funcionalidade 2: Relatório de documentos com contato do paciente
-// Tipo de pipeline: PONTE / JOIN entre duas coleções
+// Tipo de pipeline: PONTE entre duas coleções ($lookup por referência)
 // Utilidade: a recepção vê quais termos ainda não foram assinados
 // e já tem o telefone para cobrar o paciente.
 // ---------------------------------------------------------------------
@@ -114,7 +114,7 @@ titulo("A2.2 Relatório de documentos com contato do paciente ($lookup)");
 console.log("Coleções: documentos + pacientes | Etapas: $lookup → $unwind → $sort → $project\n");
 
 const relatorioDocumentos = app.documentos.aggregate([
-  // 1) JOIN: busca na coleção pacientes o documento cujo _id = paciente_id
+  // 1) $lookup: busca na coleção pacientes o documento cujo _id = paciente_id
   { $lookup: {
       from: "pacientes",
       localField: "paciente_id",

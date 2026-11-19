@@ -1,0 +1,23 @@
+{
+  "name": "consentio-redis",
+  "version": "1.0.0",
+  "description": "Consentio — Atividade A3: cache de login e estatísticas probabilísticas com Redis",
+  "main": "demo_cache_login.js",
+  "scripts": {
+    "login": "node demo_cache_login.js",
+    "estatisticas": "node demo_estatisticas.js",
+    "demo": "node demo_cache_login.js && node demo_estatisticas.js",
+    "cli:login": "node cli/executar.js cli/01_cache_login.redis",
+    "cli:hll": "node cli/executar.js cli/02_hyperloglog.redis",
+    "cli:stack": "node cli/executar.js cli/03_bloom_cms_redisstack.redis",
+    "cli:manual": "node cli/executar.js cli/04_bloom_cms_sem_modulo.redis"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "redis": "^4.7.1"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  }
+}
