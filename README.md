@@ -59,24 +59,26 @@ Desenvolvido por três profissionais com perfis complementares: tecnologia e est
 
 ### Banco `consentio` (dados da aplicação)
 
-| Coleção | O que guarda | Relações |
-|---|---|---|
-| `planos` | Planos de assinatura, preço e limites | — |
-| `clinicas` | Dados da clínica, assinatura atual (embutida) e uso do mês | `assinatura.plano_id → planos` |
-| `usuarios` | Profissionais e secretárias que acessam o sistema | `clinica_id → clinicas` |
-| `pacientes` | Cadastro + ficha/anamnese embutida | `clinica_id → clinicas` |
-| `procedimentos` | Catálogo de procedimentos odontológicos | `modelo_documento_id → modelos_documentos` |
-| `modelos_documentos` | Modelos de termos/contratos com variáveis `{{...}}` | — |
-| `documentos` | Documentos gerados (snapshot do modelo, status, assinatura, hash) | `paciente_id`, `profissional_id`, `procedimento_id` |
-| `agendamentos` | Agenda de consultas | `paciente_id`, `profissional_id`, `procedimento_id` |
-| `odontogramas` | Registro dente a dente (numeração FDI) | `paciente_id`, `profissional_id` |
-| `mapas_faciais` | Mapas de toxina e de preenchimento (pontos aplicados, produto, lote) | `paciente_id`, `profissional_id` |
+Cada coleção guarda **documentos BSON**. O que é lido sempre junto fica **embutido** no próprio documento (subdocumentos e arrays). O que é compartilhado entre coleções é **referenciado** pelo `ObjectId` do outro documento, resolvido com `$lookup` quando necessário.
+
+| Coleção | O que cada documento guarda | Embutido no documento | Referências (`ObjectId`) |
+|---|---|---|---|
+| `planos` | Plano de assinatura, preço e limites | `limites`, `recursos[]` | — |
+| `clinicas` | Dados da clínica e uso do mês | `assinatura`, `endereco`, `contato`, `uso_mes` | `assinatura.plano_id` (planos) |
+| `usuarios` | Profissional ou secretária com acesso ao sistema | `cro`, `especialidades[]` | `clinica_id` (clinicas) |
+| `pacientes` | Cadastro do paciente | `ficha.anamnese`, `contato`, `endereco`, `responsavel_legal` | `clinica_id` (clinicas) |
+| `procedimentos` | Procedimento odontológico do catálogo | — | `modelo_documento_id` (modelos_documentos) |
+| `modelos_documentos` | Modelo de termo/contrato com variáveis `{{...}}` | `revisao_juridica`, `campos_variaveis[]` | — |
+| `documentos` | Documento gerado para o paciente | `modelo` (snapshot), `assinatura` | `paciente_id`, `profissional_id`, `procedimento_id` |
+| `agendamentos` | Consulta na agenda | — | `paciente_id`, `profissional_id`, `procedimento_id` |
+| `odontogramas` | Registro dente a dente (numeração FDI) | `dentes[]` | `paciente_id`, `profissional_id` |
+| `mapas_faciais` | Mapa de toxina ou de preenchimento | `produto`, `pontos[]` | `paciente_id`, `profissional_id` |
 
 ### Banco `consentio_auditoria` (rastreabilidade / LGPD)
 
 | Coleção | O que guarda |
 |---|---|
-| `eventos_auditoria` | Quem fez o quê em qual registro (criou paciente, gerou/assinou documento…) |
+| `eventos_auditoria` | Quem fez o quê em qual documento (criou paciente, gerou/assinou documento…) |
 | `logs_acesso` | Tentativas de login; expira automaticamente após 180 dias (índice TTL) |
 
 A auditoria fica em um banco separado para isolar permissões (a aplicação só insere; leitura restrita) e não misturar volume de log com dados de negócio.
