@@ -2,6 +2,10 @@
 // Consentio — criação dos bancos, coleções, validações e índices
 // Uso: mongosh "<connection string do Atlas>" --file scripts/01_criar_estrutura.js
 // ATENÇÃO: apaga e recria as coleções listadas abaixo.
+//
+// Modelagem: o PACIENTE guarda tudo o que é dele. Documentos gerados,
+// agendamentos, odontogramas e mapas faciais são arrays embutidos no
+// documento do paciente (uma leitura traz o prontuário completo).
 // =====================================================================
 
 const app = db.getSiblingDB("consentio");
@@ -43,6 +47,16 @@ const contato = {
 // =====================================================================
 // BANCO: consentio
 // =====================================================================
+
+// Versões antigas deste projeto tinham documentos, agendamentos,
+// odontogramas e mapas_faciais como coleções separadas. Agora eles
+// moram dentro de cada paciente, então as coleções antigas são removidas.
+for (const antiga of ["documentos", "agendamentos", "odontogramas", "mapas_faciais"]) {
+  if (app.getCollectionNames().includes(antiga)) {
+    app.getCollection(antiga).drop();
+    print(`✖ consentio.${antiga} removida (agora fica dentro de pacientes)`);
+  }
+}
 
 recriar(app, "planos", {
   required: ["codigo", "nome", "preco_mensal", "limites", "ativo"],
@@ -116,6 +130,126 @@ recriar(app, "usuarios", {
   },
 });
 
+// ---------------------------------------------------------------------
+// PACIENTE: guarda tudo o que é dele (documentos, agenda, odontogramas e
+// mapas faciais ficam EMBUTIDOS como arrays de subdocumentos).
+// ---------------------------------------------------------------------
+// Item do array pacientes.documentos[] — termo gerado para o paciente
+const documentoItem = {
+  bsonType: "object",
+  required: ["_id", "profissional_id", "procedimento_id", "modelo", "conteudo_renderizado", "status", "gerado_em"],
+  properties: {
+    _id: { bsonType: "objectId" },
+    profissional_id: { bsonType: "objectId" },
+    procedimento_id: { bsonType: "objectId" },
+    // snapshot do modelo usado — o documento não muda se o modelo mudar
+    modelo: {
+      bsonType: "object",
+      required: ["id", "titulo", "versao"],
+      properties: {
+        id: { bsonType: "objectId" },
+        titulo: { bsonType: "string" },
+        versao: { bsonType: "number" },
+      },
+    },
+    conteudo_renderizado: { bsonType: "string" },
+    status: { enum: ["gerado", "enviado", "assinado", "cancelado"] },
+    assinatura: {
+      bsonType: "object",
+      properties: {
+        assinado_em: { bsonType: "date" },
+        metodo: { enum: ["presencial_papel", "presencial_tablet", "link_eletronico"] },
+        ip: { bsonType: "string" },
+      },
+    },
+    hash_sha256: { bsonType: "string", minLength: 64, maxLength: 64 },
+    gerado_em: { bsonType: "date" },
+  },
+};
+
+// Item do array pacientes.agendamentos[] — consulta na agenda
+const agendamentoItem = {
+  bsonType: "object",
+  required: ["_id", "profissional_id", "inicio", "fim", "status"],
+  properties: {
+    _id: { bsonType: "objectId" },
+    profissional_id: { bsonType: "objectId" },
+    procedimento_id: { bsonType: ["objectId", "null"] },
+    inicio: { bsonType: "date" },
+    fim: { bsonType: "date" },
+    status: { enum: ["agendado", "confirmado", "realizado", "faltou", "cancelado"] },
+    observacoes: { bsonType: "string" },
+    criado_em: { bsonType: "date" },
+  },
+};
+
+// Item do array pacientes.odontogramas[] — registro dente a dente
+const odontogramaItem = {
+  bsonType: "object",
+  required: ["_id", "profissional_id", "data", "dentes"],
+  properties: {
+    _id: { bsonType: "objectId" },
+    profissional_id: { bsonType: "objectId" },
+    data: { bsonType: "date" },
+    dentes: {
+      bsonType: "array",
+      items: {
+        bsonType: "object",
+        required: ["numero", "condicao"],
+        properties: {
+          numero: { bsonType: "number", minimum: 11, maximum: 85 }, // notação FDI
+          faces: {
+            bsonType: "array",
+            items: { enum: ["mesial", "distal", "oclusal", "vestibular", "lingual", "palatina", "incisal"] },
+          },
+          condicao: {
+            enum: ["higido", "carie", "restaurado", "ausente", "extracao_indicada", "canal", "implante", "protese", "fratura"],
+          },
+          observacao: { bsonType: "string" },
+        },
+      },
+    },
+    observacoes: { bsonType: "string" },
+  },
+};
+
+// Item do array pacientes.mapas_faciais[] — mapa de toxina/preenchimento
+const mapaFacialItem = {
+  bsonType: "object",
+  required: ["_id", "profissional_id", "tipo", "data", "produto", "pontos"],
+  properties: {
+    _id: { bsonType: "objectId" },
+    profissional_id: { bsonType: "objectId" },
+    tipo: { enum: ["toxina", "preenchimento"] },
+    data: { bsonType: "date" },
+    produto: {
+      bsonType: "object",
+      required: ["nome", "lote"],
+      properties: {
+        nome: { bsonType: "string" },
+        lote: { bsonType: "string" },
+        validade: { bsonType: "date" },
+      },
+    },
+    pontos: {
+      bsonType: "array",
+      items: {
+        bsonType: "object",
+        required: ["regiao"],
+        properties: {
+          regiao: { bsonType: "string" },
+          unidades: { bsonType: "number" }, // toxina (U)
+          volume_ml: { bsonType: "number" }, // preenchimento (mL)
+          x: { bsonType: "number" }, // posição no desenho do rosto (0–100)
+          y: { bsonType: "number" },
+        },
+      },
+    },
+    retorno_previsto: { bsonType: "date" },
+    observacoes: { bsonType: "string" },
+  },
+};
+
 recriar(app, "pacientes", {
   required: ["clinica_id", "nome", "data_nascimento", "criado_em"],
   properties: {
@@ -152,6 +286,11 @@ recriar(app, "pacientes", {
       },
     },
     tags: { bsonType: "array", items: { bsonType: "string" } },
+    // ---- dados do paciente embutidos no próprio documento ----
+    documentos: { bsonType: "array", items: documentoItem },
+    agendamentos: { bsonType: "array", items: agendamentoItem },
+    odontogramas: { bsonType: "array", items: odontogramaItem },
+    mapas_faciais: { bsonType: "array", items: mapaFacialItem },
     criado_em: { bsonType: "date" },
     atualizado_em: { bsonType: "date" },
   },
@@ -211,127 +350,6 @@ recriar(app, "procedimentos", {
   },
 });
 
-recriar(app, "documentos", {
-  required: [
-    "clinica_id",
-    "paciente_id",
-    "profissional_id",
-    "procedimento_id",
-    "modelo",
-    "conteudo_renderizado",
-    "status",
-    "gerado_em",
-  ],
-  properties: {
-    clinica_id: { bsonType: "objectId" },
-    paciente_id: { bsonType: "objectId" },
-    profissional_id: { bsonType: "objectId" },
-    procedimento_id: { bsonType: "objectId" },
-    // snapshot do modelo usado — o documento não muda se o modelo mudar
-    modelo: {
-      bsonType: "object",
-      required: ["id", "titulo", "versao"],
-      properties: {
-        id: { bsonType: "objectId" },
-        titulo: { bsonType: "string" },
-        versao: { bsonType: "number" },
-      },
-    },
-    conteudo_renderizado: { bsonType: "string" },
-    status: { enum: ["gerado", "enviado", "assinado", "cancelado"] },
-    assinatura: {
-      bsonType: "object",
-      properties: {
-        assinado_em: { bsonType: "date" },
-        metodo: { enum: ["presencial_papel", "presencial_tablet", "link_eletronico"] },
-        ip: { bsonType: "string" },
-      },
-    },
-    hash_sha256: { bsonType: "string", minLength: 64, maxLength: 64 },
-    gerado_em: { bsonType: "date" },
-  },
-});
-
-recriar(app, "agendamentos", {
-  required: ["clinica_id", "paciente_id", "profissional_id", "inicio", "fim", "status"],
-  properties: {
-    clinica_id: { bsonType: "objectId" },
-    paciente_id: { bsonType: "objectId" },
-    profissional_id: { bsonType: "objectId" },
-    procedimento_id: { bsonType: ["objectId", "null"] },
-    inicio: { bsonType: "date" },
-    fim: { bsonType: "date" },
-    status: { enum: ["agendado", "confirmado", "realizado", "faltou", "cancelado"] },
-    observacoes: { bsonType: "string" },
-    criado_em: { bsonType: "date" },
-  },
-});
-
-recriar(app, "odontogramas", {
-  required: ["clinica_id", "paciente_id", "profissional_id", "data", "dentes"],
-  properties: {
-    clinica_id: { bsonType: "objectId" },
-    paciente_id: { bsonType: "objectId" },
-    profissional_id: { bsonType: "objectId" },
-    data: { bsonType: "date" },
-    dentes: {
-      bsonType: "array",
-      items: {
-        bsonType: "object",
-        required: ["numero", "condicao"],
-        properties: {
-          numero: { bsonType: "number", minimum: 11, maximum: 85 }, // notação FDI
-          faces: {
-            bsonType: "array",
-            items: { enum: ["mesial", "distal", "oclusal", "vestibular", "lingual", "palatina", "incisal"] },
-          },
-          condicao: {
-            enum: ["higido", "carie", "restaurado", "ausente", "extracao_indicada", "canal", "implante", "protese", "fratura"],
-          },
-          observacao: { bsonType: "string" },
-        },
-      },
-    },
-    observacoes: { bsonType: "string" },
-  },
-});
-
-recriar(app, "mapas_faciais", {
-  required: ["clinica_id", "paciente_id", "profissional_id", "tipo", "data", "produto", "pontos"],
-  properties: {
-    clinica_id: { bsonType: "objectId" },
-    paciente_id: { bsonType: "objectId" },
-    profissional_id: { bsonType: "objectId" },
-    tipo: { enum: ["toxina", "preenchimento"] },
-    data: { bsonType: "date" },
-    produto: {
-      bsonType: "object",
-      required: ["nome", "lote"],
-      properties: {
-        nome: { bsonType: "string" },
-        lote: { bsonType: "string" },
-        validade: { bsonType: "date" },
-      },
-    },
-    pontos: {
-      bsonType: "array",
-      items: {
-        bsonType: "object",
-        required: ["regiao"],
-        properties: {
-          regiao: { bsonType: "string" },
-          unidades: { bsonType: "number" }, // toxina (U)
-          volume_ml: { bsonType: "number" }, // preenchimento (mL)
-          x: { bsonType: "number" }, // posição no desenho do rosto (0–100)
-          y: { bsonType: "number" },
-        },
-      },
-    },
-    retorno_previsto: { bsonType: "date" },
-    observacoes: { bsonType: "string" },
-  },
-});
-
 // ---------------- índices do banco consentio ----------------
 app.planos.createIndex({ codigo: 1 }, { unique: true });
 app.usuarios.createIndex({ email: 1 }, { unique: true });
@@ -343,12 +361,12 @@ app.pacientes.createIndex(
 app.pacientes.createIndex({ nome: "text" }, { default_language: "portuguese" });
 app.procedimentos.createIndex({ codigo: 1 }, { unique: true });
 app.modelos_documentos.createIndex({ tipo: 1, vigente: 1 });
-app.documentos.createIndex({ clinica_id: 1, paciente_id: 1, gerado_em: -1 });
-app.documentos.createIndex({ clinica_id: 1, status: 1 });
-app.agendamentos.createIndex({ clinica_id: 1, profissional_id: 1, inicio: 1 });
-app.agendamentos.createIndex({ paciente_id: 1, inicio: -1 });
-app.odontogramas.createIndex({ paciente_id: 1, data: -1 });
-app.mapas_faciais.createIndex({ paciente_id: 1, tipo: 1, data: -1 });
+// Índices multikey: indexam cada item dos arrays embutidos no paciente
+app.pacientes.createIndex({ clinica_id: 1, "agendamentos.inicio": 1 });          // agenda da clínica por data
+app.pacientes.createIndex({ "agendamentos.profissional_id": 1, "agendamentos.inicio": 1 }); // agenda do dentista
+app.pacientes.createIndex({ clinica_id: 1, "documentos.status": 1 });            // termos pendentes de assinatura
+app.pacientes.createIndex({ "documentos.hash_sha256": 1 });                       // verificar autenticidade de um termo
+app.pacientes.createIndex({ clinica_id: 1, "mapas_faciais.tipo": 1 });           // relatórios de harmonização
 print("✔ índices do banco consentio criados");
 
 // =====================================================================

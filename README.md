@@ -49,7 +49,7 @@ Desenvolvido por três profissionais com perfis complementares: tecnologia e est
 ## 2. Por que MongoDB
 
 - **Documentos de tamanho e forma variáveis**: a ficha do paciente, um odontograma e um mapa de toxina têm estruturas muito diferentes; o modelo de documentos acomoda isso com esquema flexível, cada coleção guardando documentos no formato que o dado realmente tem.
-- **Dados embutidos lidos juntos**: anamnese, endereço e contato são sempre lidos com o paciente, então ficam embutidos (*embedding*) e chegam em uma única leitura do documento, sem precisar buscar em outras coleções.
+- **O paciente guarda tudo o que é dele**: ficha/anamnese, documentos gerados, agendamentos, odontogramas e mapas faciais ficam **embutidos** (*embedding*) no documento do paciente. Uma única leitura traz o prontuário completo, e incluir um item novo é um `$push` atômico no próprio paciente.
 - **Snapshot dos documentos gerados**: o documento gerado guarda uma cópia do modelo (título, versão e texto final). Se o modelo mudar depois, o documento já assinado continua íntegro — importante para valor jurídico.
 - **Multi‑tenant simples**: todas as coleções de dados de clínica têm `clinica_id`, com índices compostos começando por ele.
 
@@ -59,26 +59,37 @@ Desenvolvido por três profissionais com perfis complementares: tecnologia e est
 
 ### Banco `consentio` (dados da aplicação)
 
-Cada coleção guarda **documentos BSON**. O que é lido sempre junto fica **embutido** no próprio documento (subdocumentos e arrays). O que é compartilhado entre coleções é **referenciado** pelo `ObjectId` do outro documento, resolvido com `$lookup` quando necessário.
+O banco tem **6 coleções**. A principal é `pacientes`: **cada paciente guarda tudo o que é dele** em arrays de subdocumentos (`documentos[]`, `agendamentos[]`, `odontogramas[]`, `mapas_faciais[]`). As demais coleções guardam o que é **compartilhado** por vários pacientes (clínica, profissionais, catálogo de procedimentos e modelos de termos) e são referenciadas pelo `ObjectId`.
 
 | Coleção | O que cada documento guarda | Embutido no documento | Referências (`ObjectId`) |
 |---|---|---|---|
+| `pacientes` | **Prontuário completo do paciente** | `ficha.anamnese`, `contato`, `endereco`, `responsavel_legal`, **`documentos[]`**, **`agendamentos[]`**, **`odontogramas[]`**, **`mapas_faciais[]`** | `clinica_id`; nos itens: `profissional_id`, `procedimento_id` |
+| `clinicas` | Dados da clínica e uso do mês | `assinatura`, `endereco`, `contato`, `uso_mes` | `assinatura.plano_id` |
+| `usuarios` | Profissional ou secretária com acesso ao sistema | `cro`, `especialidades[]` | `clinica_id` |
 | `planos` | Plano de assinatura, preço e limites | `limites`, `recursos[]` | — |
-| `clinicas` | Dados da clínica e uso do mês | `assinatura`, `endereco`, `contato`, `uso_mes` | `assinatura.plano_id` (planos) |
-| `usuarios` | Profissional ou secretária com acesso ao sistema | `cro`, `especialidades[]` | `clinica_id` (clinicas) |
-| `pacientes` | Cadastro do paciente | `ficha.anamnese`, `contato`, `endereco`, `responsavel_legal` | `clinica_id` (clinicas) |
-| `procedimentos` | Procedimento odontológico do catálogo | — | `modelo_documento_id` (modelos_documentos) |
-| `modelos_documentos` | Modelo de termo/contrato com variáveis `{{...}}` | `revisao_juridica`, `campos_variaveis[]` | — |
-| `documentos` | Documento gerado para o paciente | `modelo` (snapshot), `assinatura` | `paciente_id`, `profissional_id`, `procedimento_id` |
-| `agendamentos` | Consulta na agenda | — | `paciente_id`, `profissional_id`, `procedimento_id` |
-| `odontogramas` | Registro dente a dente (numeração FDI) | `dentes[]` | `paciente_id`, `profissional_id` |
-| `mapas_faciais` | Mapa de toxina ou de preenchimento | `produto`, `pontos[]` | `paciente_id`, `profissional_id` |
+| `procedimentos` | Procedimento odontológico do catálogo | — | `modelo_documento_id` |
+| `modelos_documentos` | Modelo de termo com variáveis `{{...}}` | `revisao_juridica`, `campos_variaveis[]` | — |
+
+**O que fica dentro de cada item do paciente:**
+
+| Array no paciente | Cada item guarda |
+|---|---|
+| `documentos[]` | `_id`, profissional, procedimento, **snapshot do modelo** (título e versão), texto final, status, assinatura e hash SHA-256 |
+| `agendamentos[]` | `_id`, profissional, procedimento, início, fim, status e observações |
+| `odontogramas[]` | `_id`, profissional, data e `dentes[]` (número FDI, faces e condição) |
+| `mapas_faciais[]` | `_id`, profissional, tipo (toxina/preenchimento), `produto` (nome, lote, validade) e `pontos[]` |
+
+**Por que embutir:** tudo isso pertence a um único paciente, não é compartilhado com outros e é consultado junto com ele. Uma leitura traz o prontuário inteiro, e cada inclusão (`$push`) é atômica no documento.
+
+**Cuidados dessa modelagem:**
+- Um documento do MongoDB tem limite de **16 MB**. Um paciente acumula poucas dezenas de termos e consultas por ano (alguns KB cada), muito abaixo do limite.
+- Consultas que atravessam pacientes (agenda do dia da clínica, termos pendentes) usam **índices multikey** sobre os campos dos arrays, como `{ clinica_id: 1, "agendamentos.inicio": 1 }`, e `$unwind` na agregação.
 
 ### Banco `consentio_auditoria` (rastreabilidade / LGPD)
 
 | Coleção | O que guarda |
 |---|---|
-| `eventos_auditoria` | Quem fez o quê em qual documento (criou paciente, gerou/assinou documento…) |
+| `eventos_auditoria` | Quem fez o quê e em qual paciente/item (`entidade` + `detalhes.documento_id`) (criou paciente, gerou/assinou documento…) |
 | `logs_acesso` | Tentativas de login; expira automaticamente após 180 dias (índice TTL) |
 
 A auditoria fica em um banco separado para isolar permissões (a aplicação só insere; leitura restrita) e não misturar volume de log com dados de negócio.
@@ -86,21 +97,48 @@ A auditoria fica em um banco separado para isolar permissões (a aplicação só
 ### Exemplo de documento (`pacientes`)
 ```json
 {
-  "_id": ObjectId("..."),
-  "clinica_id": ObjectId("..."),
-  "nome": "Ana Beatriz Souza",
-  "cpf": "123.456.789-09",
-  "data_nascimento": ISODate("1992-04-15"),
-  "contato": { "telefone": "(34) 99999-1111", "email": "ana@email.com" },
+  "_id": ObjectId("65d000000000000000000002"),
+  "clinica_id": ObjectId("65b000000000000000000001"),
+  "nome": "Carlos Eduardo Ribeiro",
+  "cpf": "987.654.321-00",
+  "data_nascimento": ISODate("1978-11-02"),
+  "contato": { "telefone": "(34) 98888-2222" },
   "ficha": {
-    "anamnese": {
-      "alergias": ["dipirona"],
-      "medicamentos_em_uso": [],
-      "doencas_preexistentes": [],
-      "gestante": false
-    }
+    "anamnese": { "alergias": [], "medicamentos_em_uso": ["losartana 50mg"], "doencas_preexistentes": ["hipertensão"] }
   },
-  "criado_em": ISODate("2026-10-20T13:00:00Z")
+  "documentos": [
+    {
+      "_id": ObjectId("660000000000000000000003"),
+      "profissional_id": ObjectId("65c000000000000000000002"),
+      "procedimento_id": ObjectId("65f000000000000000000001"),
+      "modelo": { "id": ObjectId("65e000000000000000000001"), "titulo": "Termo de Consentimento — Exodontia", "versao": 2 },
+      "conteudo_renderizado": "Eu, Carlos Eduardo Ribeiro, ... autorizo ... a extração do dente 18 ...",
+      "status": "enviado",
+      "hash_sha256": "904060c0...",
+      "gerado_em": ISODate("2026-11-03T12:15:00Z")
+    }
+  ],
+  "agendamentos": [
+    {
+      "_id": ObjectId("661000000000000000000003"),
+      "profissional_id": ObjectId("65c000000000000000000002"),
+      "procedimento_id": ObjectId("65f000000000000000000001"),
+      "inicio": ISODate("2026-11-05T13:00:00Z"), "fim": ISODate("2026-11-05T14:00:00Z"),
+      "status": "agendado"
+    }
+  ],
+  "odontogramas": [
+    {
+      "_id": ObjectId("662000000000000000000001"),
+      "profissional_id": ObjectId("65c000000000000000000002"),
+      "data": ISODate("2026-10-30T11:30:00Z"),
+      "dentes": [
+        { "numero": 18, "condicao": "extracao_indicada" },
+        { "numero": 46, "faces": ["mesial", "oclusal"], "condicao": "carie" }
+      ]
+    }
+  ],
+  "mapas_faciais": []
 }
 ```
 
@@ -109,6 +147,7 @@ A auditoria fica em um banco separado para isolar permissões (a aplicação só
 - **Índices únicos** (e‑mail do usuário, CPF por clínica, código de plano/procedimento).
 - **Índice parcial** (CPF só é único quando informado).
 - **Índice de texto** para busca de paciente por nome.
+- **Índices multikey** sobre os arrays embutidos no paciente (agenda por data, termos por status, hash do termo, tipo de mapa facial).
 - **Índice TTL** para expirar logs de acesso.
 
 ---
@@ -119,12 +158,12 @@ Estão no final de `scripts/03_consultas_exemplo.js`.
 
 | # | Funcionalidade | Coleção(ões) | Etapas do pipeline |
 |---|---|---|---|
-| 1 | **Top 5 alergias mais comuns** — ajuda a clínica a se preparar (ex.: luvas sem látex, evitar certos medicamentos) | `pacientes` | `$match` → `$unwind` → `$group` (`$sum`) → `$sort` → `$limit` → `$project` |
-| 2 | **Relatório de documentos com contato do paciente** — mostra o status de cada termo e o telefone do paciente para a recepção cobrar assinaturas pendentes | `documentos` + `pacientes` | `$lookup` → `$unwind` → `$sort` → `$project` |
+| 1 | **Top 5 alergias mais comuns**: ajuda a clínica a se preparar (ex.: luvas sem látex, evitar certos medicamentos) | `pacientes` | `$match` → `$unwind` → `$group` (`$sum`) → `$sort` → `$limit` → `$project` |
+| 2 | **Relatório de documentos com contato do paciente e profissional emissor**: mostra o status de cada termo, o telefone do paciente e o CRO de quem emitiu, para a recepção cobrar assinaturas pendentes | `pacientes` + `usuarios` | `$match` → `$unwind` → `$lookup` → `$unwind` → `$sort` → `$project` |
 
 ### Por que os dois pipelines são bem diferentes
 
-O primeiro pipeline trabalha **dentro de uma única coleção** e processa um **array embutido** no próprio documento: o `$unwind` desmembra `ficha.anamnese.alergias`, transformando um paciente com N alergias em N documentos temporários, e o `$group` com `$sum` agrega esses documentos para contar as ocorrências. Ele aproveita a modelagem por **embedding**, já que as alergias moram dentro do paciente e nenhuma outra coleção é consultada. O segundo pipeline faz o caminho oposto: cruza **duas coleções** por **referência**. O `$lookup` usa o `paciente_id` guardado em `documentos` para buscar o paciente correspondente em `pacientes` (junção de coleções por referência, feita pelo próprio MongoDB). Aqui o `$unwind` só converte o array de 1 elemento que o `$lookup` devolve em um objeto, e o `$project` remodela a saída, escondendo os ObjectIds. Em resumo, o primeiro **multiplica e reduz documentos** para gerar estatística (N → muitos → 5 grupos), enquanto o segundo **enriquece cada documento** com dados de outra coleção, mantendo a mesma quantidade de documentos (1 → 1).
+O primeiro é um pipeline de **contagem**: trabalha só na coleção `pacientes`, desmembra com `$unwind` um array de **valores simples** (`ficha.anamnese.alergias`) e depois **reduz** tudo com `$group` + `$sum` a uma estatística. Muitos pacientes viram no máximo 5 grupos, e o paciente original deixa de existir na saída. O segundo é um pipeline de **enriquecimento**: desmembra o array de **subdocumentos** `documentos[]` (cada termo vira um item e carrega junto o nome, CPF e telefone do paciente, que já estão no mesmo documento) e então usa `$lookup` para buscar em **outra coleção** (`usuarios`) o profissional que emitiu cada termo, pelo `profissional_id`. Nada é agrupado: cada termo continua sendo um item, só que completado com dados de fora. Em resumo, o primeiro **reduz** documentos a números dentro de uma coleção; o segundo **mantém** cada item e o **combina** com dados de outra coleção.
 
 ---
 
