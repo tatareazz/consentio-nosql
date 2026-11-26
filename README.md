@@ -1,5 +1,12 @@
 # Consentio — Bancos de dados NoSQL (MongoDB + Redis)
 
+> ## 🔗 [Acessar Demo Visual do Sistema (GitHub Pages)](https://tatareazz.github.io/consentio-nosql/)
+> Interface navegável com 4 telas: **Visão geral**, **Pacientes** (documento MongoDB com anamnese embutida), **Documentos** (pipelines A2 executados estágio por estágio) e **Monitor Redis** (cache de login, Bloom Filter, HyperLogLog e Count-Min Sketch, com o comando exato de cada clique). Roda 100% no navegador, sem backend; também abre direto com duplo clique em [`docs/index.html`](docs/index.html).
+>
+> **Para ativar o link:** no GitHub, abra **Settings → Pages**.
+> Em *Build and deployment*, escolha **Source: Deploy from a branch**, **Branch: `main`** e **Folder: `/docs`**, e clique em **Save**.
+> Em 1 a 2 minutos o site fica no ar em `https://tatareazz.github.io/consentio-nosql/`.
+
 Repositório das atividades de NoSQL do sistema **Consentio**:
 
 | Atividade | Banco NoSQL | Tipo | O que foi feito |
@@ -7,6 +14,7 @@ Repositório das atividades de NoSQL do sistema **Consentio**:
 | A1 | MongoDB Atlas | Documentos | Descrição do sistema, bancos, coleções com validação e índices, documentos de exemplo |
 | A2 | MongoDB Atlas | Documentos | 2 funcionalidades com pipelines de agregação diferentes |
 | A3 | Redis | Chave-valor em memória | Cache de login de usuário e estatísticas com Bloom Filter, HyperLogLog e Count-Min Sketch |
+| Visual | — | Interface web | [`docs/index.html`](docs/index.html): demo navegável das três atividades (GitHub Pages) |
 
 Site do sistema: https://consentio.com.br
 
@@ -161,6 +169,36 @@ Estão no final de `scripts/03_consultas_exemplo.js`.
 | 1 | **Top 5 alergias mais comuns**: ajuda a clínica a se preparar (ex.: luvas sem látex, evitar certos medicamentos) | `pacientes` | `$match` → `$unwind` → `$group` (`$sum`) → `$sort` → `$limit` → `$project` |
 | 2 | **Relatório de documentos com contato do paciente e profissional emissor**: mostra o status de cada termo, o telefone do paciente e o CRO de quem emitiu, para a recepção cobrar assinaturas pendentes | `pacientes` + `usuarios` | `$match` → `$unwind` → `$lookup` → `$unwind` → `$sort` → `$project` |
 
+### Passo a passo de cada pipeline (com os dados de exemplo)
+
+Na demo visual, aba **Documentos → Ver pipeline MongoDB**, cada estágio aparece com o código, quantos documentos entram e saem, e a saída real.
+
+**A2.1: Top 5 alergias** (`pacientes`)
+
+| # | Estágio | O que faz | Entram → saem |
+|---|---|---|---|
+| 1 | `$match: { "ficha.anamnese.alergias.0": { $exists: true } }` | Só pacientes com pelo menos 1 alergia | 4 → 2 |
+| 2 | `$unwind: "$ficha.anamnese.alergias"` | Um paciente com N alergias vira N documentos, cada um com **uma** alergia | 2 → 2 |
+| 3 | `$group: { _id: { $toLower: … }, total_pacientes: { $sum: 1 } }` | Agrupa pela alergia (minúsculas) e conta | 2 → 2 |
+| 4 | `$sort: { total_pacientes: -1, _id: 1 }` | Mais comum primeiro; empate em ordem alfabética | 2 → 2 |
+| 5 | `$limit: 5` | Mantém as 5 primeiras | 2 → 2 |
+| 6 | `$project: { _id: 0, alergia: "$_id", total_pacientes: 1 }` | Renomeia `_id` para `alergia` | 2 → 2 |
+
+Resultado: `dipirona: 1`, `látex: 1`. Na demo, ao adicionar uma alergia a um paciente (`$addToSet`), o ranking muda na hora.
+
+**A2.2: Relatório de documentos com contato** (`pacientes` + `usuarios`)
+
+| # | Estágio | O que faz | Entram → saem |
+|---|---|---|---|
+| 1 | `$match: { "documentos.0": { $exists: true } }` | Só pacientes com algum termo | 4 → 2 |
+| 2 | `$unwind: "$documentos"` | Cada termo embutido vira um item; nome, CPF e telefone do paciente vêm junto | 2 → 3 |
+| 3 | `$lookup: { from: "usuarios", localField: "documentos.profissional_id", foreignField: "_id", as: "profissional" }` | Busca o dentista que emitiu o termo em **outra coleção** | 3 → 3 |
+| 4 | `$unwind: "$profissional"` | Array de 1 elemento do `$lookup` vira objeto | 3 → 3 |
+| 5 | `$sort: { "documentos.gerado_em": -1 }` | Mais recentes primeiro | 3 → 3 |
+| 6 | `$project: { … }` | Esconde os ObjectIds; mostra status, documento, data, paciente, CPF, telefone, profissional e CRO | 3 → 3 |
+
+Resultado: 3 termos (Exodontia **enviado**, Endodôntico **assinado**, Toxina **assinado**). Na demo, os botões **Emitir**, **Enviar** e **Assinar** executam `$push` e `$set` com o posicional `documentos.$`, e o relatório é recalculado.
+
 ### Por que os dois pipelines são bem diferentes
 
 O primeiro é um pipeline de **contagem**: trabalha só na coleção `pacientes`, desmembra com `$unwind` um array de **valores simples** (`ficha.anamnese.alergias`) e depois **reduz** tudo com `$group` + `$sum` a uma estatística. Muitos pacientes viram no máximo 5 grupos, e o paciente original deixa de existir na saída. O segundo é um pipeline de **enriquecimento**: desmembra o array de **subdocumentos** `documentos[]` (cada termo vira um item e carrega junto o nome, CPF e telefone do paciente, que já estão no mesmo documento) e então usa `$lookup` para buscar em **outra coleção** (`usuarios`) o profissional que emitiu cada termo, pelo `profissional_id`. Nada é agrupado: cada termo continua sendo um item, só que completado com dados de fora. Em resumo, o primeiro **reduz** documentos a números dentro de uma coleção; o segundo **mantém** cada item e o **combina** com dados de outra coleção.
@@ -217,9 +255,52 @@ O MongoDB continua sendo o banco principal. O **Redis** (NoSQL chave-valor, em m
 
 📄 **Explicação completa, linha por linha, com fluxo e trade-offs:** [`redis/DEFESA_A3.md`](redis/DEFESA_A3.md)
 
+### Passo a passo dos comandos Redis
+
+Na demo visual, aba **Redis**, cada botão executa estes comandos e mostra a resposta como no `redis-cli`. Os mesmos comandos estão em `redis/cli/*.redis` e no código `redis/src/`.
+
+**(a) Cache de login** (`redis/src/cache_login.js`)
+
+| Passo | Comando | Para quê |
+|---|---|---|
+| 1. Bloqueado? | `GET consentio:login:falhas:<email>` | 5 ou mais erros: recusa e informa `TTL` restante |
+| 2. Busca no cache | `HGETALL consentio:usuario:email:<email>` | Achou: **CACHE HIT**. Vazio: **CACHE MISS** |
+| 3. Miss: grava | `MULTI` · `HSET consentio:usuario:email:<email> id … papel … senha_hash scrypt$…` · `EXPIRE … 600` · `EXEC` | Copia o usuário do MongoDB por 10 min (só o hash da senha) |
+| 4. Senha errada | `INCR consentio:login:falhas:<email>` · `EXPIRE … 900` (na 1ª) | Conta tentativas numa janela de 15 min |
+| 5. Senha certa | `DEL …falhas…` · `MULTI` · `HSET consentio:sessao:<token> usuario_id … permissoes …` · `EXPIRE … 3600` · `SADD consentio:usuario:<id>:sessoes <token>` · `EXEC` | Cria a sessão de 1 h e registra o token do usuário |
+| 6. Cada requisição | `HGETALL consentio:sessao:<token>` · `EXPIRE … 3600` | Valida sem ir ao MongoDB e renova o TTL (expiração deslizante) |
+| 7. Logout | `DEL consentio:sessao:<token>` · `SREM …:sessoes <token>` | Encerra a sessão |
+| 8. Troca de senha | `SMEMBERS …:sessoes` · `MULTI` · `DEL usuario:email:…` · `DEL …:sessoes` · `DEL sessao:<cada token>` · `EXEC` | Invalida o cache e derruba **todas** as sessões |
+
+**(b) Bloom Filter**: "este e-mail/CPF já existe?"
+
+| Passo | Com RedisBloom | Sem módulo (mesmo algoritmo) |
+|---|---|---|
+| Criar (10.000 itens, 1% de erro) | `BF.RESERVE consentio:stats:bf:emails 0.01 10000` | bitmap de m = 95.851 bits, k = 7 hashes |
+| Inserir | `BF.ADD` / `BF.MADD … itens` | `SETBIT … <posição> 1` (7 vezes por item) |
+| Consultar | `BF.EXISTS` / `BF.MEXISTS …` | `GETBIT … <posição>` (7 vezes) |
+| Ler a resposta | `0`: **com certeza não existe** (cadastra sem consultar o MongoDB). `1`: **talvez exista** (confirma no MongoDB) | algum bit 0 é "não existe"; todos 1 é "talvez" |
+
+**(c) HyperLogLog**: "quantos únicos?"
+
+| Passo | Comando |
+|---|---|
+| Registrar acesso | `PFADD consentio:stats:hll:ativos:<dia> <usuario>` (repetido não conta de novo) |
+| Contar o dia | `PFCOUNT consentio:stats:hll:ativos:<dia>` |
+| Somar a semana sem duplicar | `PFMERGE consentio:stats:hll:ativos:semana-48 <7 dias>` · `PFCOUNT …semana-48` |
+| Ver a memória | `MEMORY USAGE <chave>` (máx. ~12 KB, qualquer quantidade) |
+
+**(d) Count-Min Sketch**: "quantas vezes?"
+
+| Passo | Com RedisBloom | Sem módulo |
+|---|---|---|
+| Criar | `CMS.INITBYDIM consentio:stats:cms:eventos:<dia> 2000 5` | matriz num HASH com campos `"linha:coluna"` |
+| Registrar evento | `CMS.INCRBY … documento_gerado 1 documento_gerado@11h 1` | `HINCRBY … "<linha>:<coluna>" 1` (uma vez por linha) |
+| Consultar | `CMS.QUERY … documento_gerado` | `HMGET …` e pega o **menor** valor |
+
 ### Resultados medidos (demo)
 - Validação de sessão pelo Redis: **~0,6 ms**, sem consultar o MongoDB; o 2º login não vai ao banco.
-- Bloom Filter (10 mil e-mails, 1%): **0 falsos negativos**, **1,08% de falsos positivos**, 12 KB.
+- Bloom Filter (10 mil e-mails, 1%): **0 falsos negativos**, **1,08% de falsos positivos** (108 em 10.000; a demo visual dá o mesmo número), 12 KB.
 - HyperLogLog com 100 mil pacientes: **erro 0,37% em 14 KB**, contra **5.442 KB** de um SET exato.
 - Count-Min Sketch com 50 mil eventos: estimativas exatas com largura 2000; superestimativa visível com largura 8.
 
@@ -259,6 +340,8 @@ Com o `redis-cli` instalado: `grep -v '^#' cli/01_cache_login.redis | redis-cli 
 ```
 .
 ├── README.md                        # descrição do sistema, modelagem e instruções
+├── docs/
+│   └── index.html                   # demo visual (GitHub Pages): 4 telas, sem backend
 ├── scripts/                         # MongoDB (A1 e A2)
 │   ├── 01_criar_estrutura.js        # cria bancos, coleções, validações e índices
 │   ├── 02_inserir_exemplos.js       # insere documentos de exemplo

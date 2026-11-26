@@ -4,6 +4,10 @@
 //
 // Modelagem: cada paciente guarda tudo o que é dele (documentos,
 // agendamentos, odontogramas e mapas faciais são arrays embutidos).
+//
+// Visualização: os pipelines A2.1 e A2.2 (final deste arquivo) aparecem
+// executados estágio por estágio em docs/index.html → aba "Documentos"
+// (botão "Ver pipeline MongoDB"), com os mesmos dados do script 02.
 // =====================================================================
 
 const app = db.getSiblingDB("consentio");

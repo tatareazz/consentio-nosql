@@ -1,0 +1,1592 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Consentio — Demo NoSQL</title>
+<meta name="description" content="Demo visual do Consentio: MongoDB (pacientes com tudo embutido, pipelines A2) e Redis (cache de login e estruturas probabilísticas, A3). Roda 100% no navegador.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230f766e'/%3E%3Cpath d='M20 18c-5 0-8 4-8 10 0 9 4 13 6 20 1 4 5 4 6 0l3-9c1-3 5-3 6 0l3 9c1 4 5 4 6 0 2-7 6-11 6-20 0-6-3-10-8-10-4 0-6 2-10 2s-6-2-10-2z' fill='white'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f4f7f6; --surface:#ffffff; --surface-2:#f8fbfa; --border:#e1e8e6; --border-strong:#c9d6d2;
+  --text:#14211f; --text-2:#4b5c59; --text-3:#7b8b88;
+  --primary:#0f766e; --primary-2:#0d9488; --primary-soft:#e2f4f1; --primary-text:#0b5d57;
+  --accent:#2563eb; --accent-soft:#e6efff;
+  --ok:#15803d; --ok-soft:#e5f6ea; --warn:#b45309; --warn-soft:#fdf1e0; --bad:#b91c1c; --bad-soft:#fde8e8;
+  --redis:#c2261c; --redis-soft:#fdeceb; --mongo:#13803f; --mongo-soft:#e6f5ea;
+  --code-bg:#0f1b1a; --code-text:#d7e6e3; --code-dim:#7f9a95; --code-key:#7dd3c0; --code-str:#f7c97e; --code-num:#a5b4fc;
+  --shadow:0 1px 2px rgba(16,40,36,.06),0 4px 16px rgba(16,40,36,.05);
+  --radius:14px; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0c1413; --surface:#121d1c; --surface-2:#162322; --border:#22312f; --border-strong:#30433f;
+    --text:#e5efed; --text-2:#a9bbb7; --text-3:#7a8d89;
+    --primary:#2dd4bf; --primary-2:#14b8a6; --primary-soft:#123a36; --primary-text:#7ee8d9;
+    --accent:#7aa7ff; --accent-soft:#16233f;
+    --ok:#4ade80; --ok-soft:#12301d; --warn:#fbbf24; --warn-soft:#352711; --bad:#f87171; --bad-soft:#3a1616;
+    --redis:#ff7a6e; --redis-soft:#3a1714; --mongo:#5be08a; --mongo-soft:#12301d;
+    --code-bg:#08100f; --shadow:0 1px 2px rgba(0,0,0,.4);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0c1413; --surface:#121d1c; --surface-2:#162322; --border:#22312f; --border-strong:#30433f;
+  --text:#e5efed; --text-2:#a9bbb7; --text-3:#7a8d89;
+  --primary:#2dd4bf; --primary-2:#14b8a6; --primary-soft:#123a36; --primary-text:#7ee8d9;
+  --accent:#7aa7ff; --accent-soft:#16233f;
+  --ok:#4ade80; --ok-soft:#12301d; --warn:#fbbf24; --warn-soft:#352711; --bad:#f87171; --bad-soft:#3a1616;
+  --redis:#ff7a6e; --redis-soft:#3a1714; --mongo:#5be08a; --mongo-soft:#12301d;
+  --code-bg:#08100f; --shadow:0 1px 2px rgba(0,0,0,.4);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:14.5px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3,h4{margin:0;line-height:1.25}
+h2{font-size:18px} h3{font-size:15.5px} h4{font-size:13.5px}
+p{margin:0}
+a{color:var(--primary)}
+code,.mono{font-family:var(--mono);font-size:12.5px}
+.app{display:grid;grid-template-columns:248px 1fr;min-height:100vh}
+/* ---------- sidebar ---------- */
+.side{background:var(--surface);border-right:1px solid var(--border);padding:20px 14px;display:flex;flex-direction:column;gap:18px;position:sticky;top:0;height:100vh}
+.brand{display:flex;gap:10px;align-items:center;padding:0 6px}
+.brand-logo{width:36px;height:36px;border-radius:10px;background:var(--primary);display:grid;place-items:center;flex:none}
+.brand-logo svg{width:22px;height:22px}
+.brand b{font-size:17px;letter-spacing:-.01em;display:block}
+.brand small{color:var(--text-3);font-size:12px}
+.nav{display:flex;flex-direction:column;gap:4px}
+.nav button{display:flex;align-items:center;gap:10px;padding:10px 12px;border:0;background:none;border-radius:10px;cursor:pointer;text-align:left;color:var(--text-2);font-weight:500}
+.nav button svg{width:18px;height:18px;flex:none}
+.nav button:hover{background:var(--surface-2);color:var(--text)}
+.nav button[aria-current="page"]{background:var(--primary-soft);color:var(--primary-text)}
+.nav .sub{display:block;font-size:11.5px;font-weight:400;color:var(--text-3)}
+.side-foot{margin-top:auto;font-size:12px;color:var(--text-3);padding:0 6px;display:flex;flex-direction:column;gap:8px}
+.stack-pill{display:flex;gap:6px;flex-wrap:wrap}
+/* ---------- main ---------- */
+main{min-width:0;padding:22px 28px 40px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px;flex-wrap:wrap}
+.top h1{font-size:22px;letter-spacing:-.015em}
+.top .crumb{color:var(--text-3);font-size:13px}
+.top-right{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid var(--border);background:var(--surface);white-space:nowrap}
+.pill .dot{width:7px;height:7px;border-radius:50%;background:var(--text-3)}
+.pill.on .dot{background:var(--ok)}
+.tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap}
+.tag.mongo{background:var(--mongo-soft);color:var(--mongo)}
+.tag.redis{background:var(--redis-soft);color:var(--redis)}
+.tag.ok{background:var(--ok-soft);color:var(--ok)}
+.tag.warn{background:var(--warn-soft);color:var(--warn)}
+.tag.bad{background:var(--bad-soft);color:var(--bad)}
+.tag.info{background:var(--accent-soft);color:var(--accent)}
+.tag.neutral{background:var(--surface-2);color:var(--text-2);border:1px solid var(--border)}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:var(--warn-soft);color:var(--warn);font-size:12.5px;font-weight:600}
+.chip button{border:0;background:none;cursor:pointer;padding:0;color:inherit;font-size:14px;line-height:1;opacity:.7}
+.chip button:hover{opacity:1}
+section[data-tab]{display:none}
+section[data-tab].active{display:block}
+.grid{display:grid;gap:16px}
+.g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g-side{grid-template-columns:minmax(0,340px) minmax(0,1fr)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;min-width:0}
+.card-h{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.card-h p{color:var(--text-2);font-size:13px;margin-top:3px}
+.kpi{display:flex;flex-direction:column;gap:6px}
+.kpi .lbl{color:var(--text-2);font-size:13px;display:flex;align-items:center;gap:8px}
+.kpi .val{font-size:30px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.kpi .sub{font-size:12px;color:var(--text-3)}
+.kpi .ico{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:var(--primary-soft);color:var(--primary)}
+.kpi .ico svg{width:17px;height:17px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 14px;border-radius:10px;border:1px solid var(--border-strong);background:var(--surface);cursor:pointer;font-weight:600;font-size:13.5px;white-space:nowrap}
+.btn:hover{border-color:var(--primary);color:var(--primary)}
+.btn svg{width:16px;height:16px}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+.btn.primary:hover{background:var(--primary-2);color:#fff}
+:root[data-theme="dark"] .btn.primary,:root:not([data-theme="light"]) .btn.primary{color:#04201d}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]) .btn.primary{color:#fff}}
+.btn.redis{border-color:var(--redis);color:var(--redis)}
+.btn.redis:hover{background:var(--redis-soft)}
+.btn.ghost{border-color:transparent;background:none;color:var(--text-2)}
+.btn.ghost:hover{background:var(--surface-2);color:var(--text)}
+.btn.sm{padding:5px 10px;font-size:12.5px;border-radius:8px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.col{display:flex;flex-direction:column;gap:10px}
+.muted{color:var(--text-2)} .dim{color:var(--text-3)} .small{font-size:12.5px}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.field label{font-size:12.5px;font-weight:600;color:var(--text-2)}
+.field input,.field select,.field textarea{width:100%;padding:8px 10px;border:1px solid var(--border-strong);border-radius:9px;background:var(--surface);min-width:0}
+.field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--primary-soft);border-color:var(--primary)}
+.field .err{color:var(--bad);font-size:12px}
+.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.form-grid .full{grid-column:1/-1}
+.inline-check{display:flex;gap:8px;align-items:center;font-size:13px}
+/* tables */
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{text-align:left;font-weight:600;color:var(--text-2);background:var(--surface-2);padding:9px 12px;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+/* code / json / terminal */
+pre{margin:0}
+.code{background:var(--code-bg);color:var(--code-text);border-radius:12px;padding:14px 16px;font-family:var(--mono);font-size:12.5px;line-height:1.55;overflow:auto;max-height:420px;white-space:pre}
+.code .k{color:var(--code-key)} .code .s{color:var(--code-str)} .code .nu{color:var(--code-num)} .code .c{color:var(--code-dim)} .code .f{color:#f0abfc}
+.term{background:var(--code-bg);color:var(--code-text);border-radius:12px;font-family:var(--mono);font-size:12.3px;line-height:1.5;height:300px;overflow:auto;padding:12px 14px;white-space:pre-wrap;word-break:break-word}
+.term .cmt{color:var(--code-dim)}
+.term .cmd{color:#fff} .term .cmd::before{content:"redis> ";color:#ff8f85}
+.term .mcmd{color:#fff} .term .mcmd::before{content:"mongosh> ";color:#6ee7a0}
+.term .res{color:var(--code-key)}
+.term .err{color:#fca5a5}
+.term .hdr{color:#fde68a;font-weight:700;margin-top:6px}
+.term .hit{color:#86efac;font-weight:700} .term .miss{color:#fca5a5;font-weight:700}
+.term-head{display:flex;justify-content:space-between;align-items:center;margin:10px 0 6px;gap:8px}
+.term-head span{font-size:12px;font-weight:600;color:var(--text-2)}
+/* list */
+.plist{display:flex;flex-direction:column;gap:6px;max-height:640px;overflow:auto;padding-right:2px}
+.pitem{border:1px solid var(--border);border-radius:12px;padding:10px 12px;cursor:pointer;background:var(--surface);display:flex;flex-direction:column;gap:6px;text-align:left;width:100%}
+.pitem:hover{border-color:var(--border-strong)}
+.pitem[aria-selected="true"]{border-color:var(--primary);background:var(--primary-soft)}
+.pitem .nm{font-weight:700}
+.avatar{width:38px;height:38px;border-radius:50%;background:var(--primary-soft);color:var(--primary-text);display:grid;place-items:center;font-weight:700;flex:none}
+.sec-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);margin:14px 0 8px}
+.mini-list{display:flex;flex-direction:column;gap:6px}
+.mini-item{display:flex;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);font-size:13px;flex-wrap:wrap}
+/* bars */
+.bars{display:flex;flex-direction:column;gap:10px}
+.bar-row{display:grid;grid-template-columns:120px 1fr 44px;gap:10px;align-items:center;font-size:13px}
+.bar-row .track{height:14px;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;overflow:hidden}
+.bar-row .fill{height:100%;background:var(--primary);border-radius:999px;transition:width .4s}
+.bar-row .fill.warn{background:var(--warn)}
+.bar-row .fill.redis{background:var(--redis)}
+.hbars{display:flex;align-items:flex-end;gap:4px;height:120px;padding-top:6px}
+.hbars .hb{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0}
+.hbars .hb i{display:block;width:100%;background:var(--primary-soft);border:1px solid var(--primary);border-radius:5px 5px 0 0;min-height:2px;transition:height .3s}
+.hbars .hb.peak i{background:var(--warn);border-color:var(--warn)}
+.hbars .hb span{font-size:10.5px;color:var(--text-3)}
+/* pipeline */
+.pipe{display:none;margin-top:14px;border-top:1px dashed var(--border-strong);padding-top:14px}
+.pipe.open{display:block}
+.stage{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+.stage:last-child{border-bottom:0}
+.stage > div{min-width:0}
+.stage .n{width:30px;height:30px;border-radius:50%;background:var(--mongo-soft);color:var(--mongo);font-weight:800;display:grid;place-items:center;font-size:13px}
+.stage .op{font-family:var(--mono);font-weight:700;color:var(--mongo)}
+.stage .flow{font-size:12px;color:var(--text-3)}
+.stage details{margin-top:6px}
+.stage summary{cursor:pointer;font-size:12.5px;color:var(--primary);font-weight:600}
+.stage .code{max-height:240px;margin-top:6px}
+/* redis tab */
+.mode{display:inline-flex;border:1px solid var(--border-strong);border-radius:10px;overflow:hidden}
+.mode button{border:0;background:var(--surface);padding:7px 12px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--text-2)}
+.mode button[aria-pressed="true"]{background:var(--redis);color:#fff}
+.keys{display:flex;flex-direction:column;gap:6px;max-height:300px;overflow:auto}
+.key{display:grid;grid-template-columns:62px 1fr 74px;gap:8px;align-items:center;font-size:12.5px;padding:7px 10px;border:1px solid var(--border);border-radius:9px;background:var(--surface-2)}
+.key .ty{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--redis)}
+.key .nm{font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.key .ttl{font-family:var(--mono);text-align:right;color:var(--text-2)}
+.key .ttl.low{color:var(--warn)}
+.bits{display:flex;gap:6px;flex-wrap:wrap}
+.bit{display:flex;flex-direction:column;align-items:center;gap:3px;font-family:var(--mono);font-size:10.5px;color:var(--text-3)}
+.bit b{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;border:1px solid var(--border-strong);font-size:14px;color:var(--text-3);background:var(--surface-2)}
+.bit.on b{background:var(--primary);border-color:var(--primary);color:#fff}
+.bit.off b{background:var(--bad-soft);border-color:var(--bad);color:var(--bad)}
+.verdict{padding:10px 12px;border-radius:10px;font-size:13.5px;font-weight:600}
+.verdict.no{background:var(--ok-soft);color:var(--ok)} .verdict.maybe{background:var(--warn-soft);color:var(--warn)} .verdict.info{background:var(--accent-soft);color:var(--accent)}
+.stat-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.stat{border:1px solid var(--border);border-radius:10px;padding:9px 11px;background:var(--surface-2)}
+.stat b{display:block;font-size:18px;font-variant-numeric:tabular-nums}
+.stat span{font-size:11.5px;color:var(--text-3)}
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none}
+.steps li{counter-increment:s;display:grid;grid-template-columns:24px 1fr;gap:8px;font-size:13px;color:var(--text-2)}
+.steps li::before{content:counter(s);width:22px;height:22px;border-radius:50%;background:var(--redis-soft);color:var(--redis);font-weight:700;font-size:12px;display:grid;place-items:center}
+.steps code{color:var(--text)}
+.subtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.subtabs button{border:1px solid var(--border-strong);background:var(--surface);border-radius:999px;padding:7px 14px;cursor:pointer;font-weight:600;font-size:13px;color:var(--text-2)}
+.subtabs button[aria-selected="true"]{background:var(--redis);border-color:var(--redis);color:#fff}
+.subpanel{display:none}.subpanel.active{display:block}
+.arch{display:grid;grid-template-columns:1fr 26px 1fr 26px 1fr;align-items:center;gap:6px}
+.arch .box{border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center;background:var(--surface-2);font-size:12.5px}
+.arch .box b{display:block;font-size:13.5px}
+.arch .arrow{text-align:center;color:var(--text-3);font-size:18px}
+.note{font-size:12.5px;color:var(--text-2);background:var(--surface-2);border:1px dashed var(--border-strong);border-radius:10px;padding:10px 12px}
+.toast{position:fixed;right:18px;bottom:18px;background:var(--text);color:var(--surface);padding:10px 14px;border-radius:10px;font-size:13px;box-shadow:var(--shadow);opacity:0;transform:translateY(8px);transition:.2s;pointer-events:none;max-width:min(380px,calc(100vw - 36px));z-index:50}
+.toast.show{opacity:1;transform:none}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.empty{padding:18px;text-align:center;color:var(--text-3);font-size:13px;border:1px dashed var(--border-strong);border-radius:12px}
+.preview-text{font-size:13px;color:var(--text-2);background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-style:italic}
+/* responsive */
+@media (max-width:1180px){.g4{grid-template-columns:repeat(2,minmax(0,1fr))}.g3{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:980px){.g-side,.g2{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:860px){
+  .app{grid-template-columns:1fr}
+  .side{position:sticky;top:0;z-index:20;height:auto;flex-direction:row;align-items:center;padding:10px 16px;gap:10px;border-right:0;border-bottom:1px solid var(--border)}
+  .brand small,.side-foot,.nav .sub{display:none}
+  .nav{flex-direction:row;flex:1;justify-content:flex-end;gap:2px}
+  .nav button{padding:8px 10px;flex-direction:column;gap:2px;font-size:11px}
+  main{padding:16px 16px 40px}
+}
+@media (max-width:560px){
+  .g4,.g3{grid-template-columns:minmax(0,1fr)}
+  .form-grid{grid-template-columns:minmax(0,1fr)}
+  .brand b{display:none}
+  .stat-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .bar-row{grid-template-columns:90px 1fr 38px}
+  .arch{grid-template-columns:1fr}.arch .arrow{transform:rotate(90deg)}
+  .key{grid-template-columns:52px 1fr 64px}
+  .top h1{font-size:19px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <div class="brand-logo" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M20 14c-6 0-10 5-10 12 0 10 5 15 7 23 1 5 6 5 7 0l3-10c1-4 6-4 7 0l3 10c1 5 6 5 7 0 2-8 7-13 7-23 0-7-4-12-10-12-4 0-7 2-11 2s-7-2-10-2z" fill="#fff"/></svg></div>
+      <div><b>Consentio</b><small>Demo NoSQL · MongoDB + Redis</small></div>
+    </div>
+    <nav class="nav" aria-label="Telas">
+      <button data-go="dashboard" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><span>Visão geral<span class="sub">Dashboard da clínica</span></span></button>
+      <button data-go="pacientes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-7 7-7s7 3 7 7"/><path d="M16 4a4 4 0 0 1 0 8M22 21c0-3-2-6-5-7"/></svg><span>Pacientes<span class="sub">MongoDB · documentos</span></span></button>
+      <button data-go="documentos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg><span>Documentos<span class="sub">Pipelines A2</span></span></button>
+      <button data-go="redis"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><span>Redis<span class="sub">Cache e estatísticas A3</span></span></button>
+    </nav>
+    <div class="side-foot">
+      <div class="stack-pill"><span class="tag mongo">MongoDB</span><span class="tag redis">Redis</span></div>
+      <div>Dados fictícios, iguais aos de <code>scripts/02_inserir_exemplos.js</code>. Tudo roda no navegador.</div>
+      <div><button class="btn ghost sm" id="btnReset" type="button">Restaurar dados iniciais</button></div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="top">
+      <div>
+        <div class="crumb" id="crumb">Clínica Sorriso Pleno · Uberlândia/MG</div>
+        <h1 id="pageTitle">Visão geral</h1>
+      </div>
+      <div class="top-right">
+        <span class="pill" id="sessionPill" title="Sessão guardada no Redis"><span class="dot"></span><span id="sessionPillText">Redis: sem sessão</span></span>
+        <button class="btn sm ghost" id="btnTheme" type="button" aria-label="Alternar tema claro/escuro">◐ Tema</button>
+      </div>
+    </div>
+
+    <!-- =============================== TELA 1: DASHBOARD =============================== -->
+    <section data-tab="dashboard" class="active" aria-label="Visão geral">
+      <div class="grid g4" id="kpis"></div>
+
+      <div class="grid g3" style="margin-top:16px">
+        <div class="card">
+          <div class="card-h"><div><h3>Sessão em cache</h3><p>Guardada no Redis como Hash com TTL</p></div><span class="tag redis">Redis</span></div>
+          <div id="dashSession"></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><div><h3>Ações rápidas</h3><p>Atalhos para cada parte da demo</p></div></div>
+          <div class="col">
+            <button class="btn" data-quick="novo-paciente" type="button">+ Cadastrar paciente <span class="tag mongo">insertOne</span></button>
+            <button class="btn" data-quick="emitir" type="button">Emitir termo de consentimento <span class="tag mongo">$push</span></button>
+            <button class="btn" data-quick="pipelines" type="button">Ver pipelines da A2 <span class="tag mongo">aggregate</span></button>
+            <button class="btn" data-quick="bloom" type="button">Testar Bloom Filter <span class="tag redis">BF.EXISTS</span></button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><div><h3>Arquitetura</h3><p>Quem guarda o quê</p></div></div>
+          <div class="arch">
+            <div class="box"><b>Navegador</b>Recepção e dentistas</div><div class="arrow">→</div>
+            <div class="box" style="border-color:var(--redis)"><b style="color:var(--redis)">Redis</b>sessão, cache e estatísticas</div><div class="arrow">→</div>
+            <div class="box" style="border-color:var(--mongo)"><b style="color:var(--mongo)">MongoDB</b>paciente com tudo embutido</div>
+          </div>
+          <p class="small muted" style="margin-top:12px">O MongoDB é a fonte da verdade. O Redis fica na frente: responde a sessão em menos de 1 ms e conta uso com pouquíssima memória.</p>
+        </div>
+      </div>
+
+      <div class="grid g2" style="margin-top:16px">
+        <div class="card">
+          <div class="card-h"><div><h3>Consultas agendadas</h3><p><code>$unwind</code> em <code>pacientes.agendamentos[]</code>, ordenado por início</p></div><span class="tag mongo">MongoDB</span></div>
+          <div id="dashAgenda"></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><div><h3>Termos por status</h3><p><code>$unwind</code> + <code>$group</code> em <code>documentos[]</code></p></div><span class="tag mongo">MongoDB</span></div>
+          <div id="dashStatus" class="bars"></div>
+          <div class="sec-title">Top alergias (pipeline A2.1)</div>
+          <div id="dashAlergias" class="bars"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =============================== TELA 2: PACIENTES =============================== -->
+    <section data-tab="pacientes" aria-label="Pacientes">
+      <div class="grid g-side">
+        <div class="card">
+          <div class="card-h"><div><h3>Pacientes</h3><p>Coleção <code>consentio.pacientes</code></p></div><button class="btn primary sm" id="btnNovoPaciente" type="button">+ Novo</button></div>
+          <div class="field" style="margin-bottom:10px"><label for="busca">Buscar por nome <span class="dim">(índice de texto)</span></label><input id="busca" type="search" placeholder="ex.: carlos"></div>
+          <div class="plist" id="plist" role="listbox" aria-label="Lista de pacientes"></div>
+        </div>
+        <div class="col" style="gap:16px;min-width:0">
+          <div class="card" id="novoPacienteCard" hidden>
+            <div class="card-h"><div><h3>Novo paciente</h3><p>Validado como o <code>$jsonSchema</code> do script 01 antes do <code>insertOne</code></p></div><button class="btn ghost sm" id="btnFecharNovo" type="button">Fechar</button></div>
+            <form id="formPaciente" class="form-grid" novalidate>
+              <div class="field full"><label for="fNome">Nome *</label><input id="fNome" required minlength="2" placeholder="Nome completo"><span class="err" data-err="nome"></span></div>
+              <div class="field"><label for="fNasc">Data de nascimento *</label><input id="fNasc" type="date" required><span class="err" data-err="data_nascimento"></span></div>
+              <div class="field"><label for="fCpf">CPF</label><input id="fCpf" placeholder="000.000.000-00" inputmode="numeric"><span class="err" data-err="cpf"></span></div>
+              <div class="field"><label for="fTel">Telefone</label><input id="fTel" placeholder="(34) 90000-0000"></div>
+              <div class="field"><label for="fEmail">E-mail</label><input id="fEmail" type="email" placeholder="paciente@email.com"><span class="err" data-err="email"></span></div>
+              <div class="field"><label for="fClinica">Clínica</label><select id="fClinica"></select></div>
+              <div class="field"><label for="fSexo">Sexo</label><select id="fSexo"><option value="F">F</option><option value="M">M</option><option value="outro">outro</option><option value="nao_informado">não informado</option></select></div>
+              <div class="field full"><label for="fAlergias">Alergias <span class="dim">(separe por vírgula; viram o array <code>ficha.anamnese.alergias</code>)</span></label><input id="fAlergias" placeholder="ex.: penicilina, látex"></div>
+              <div class="field full"><label for="fMed">Medicamentos em uso <span class="dim">(vírgula)</span></label><input id="fMed" placeholder="ex.: losartana 50mg"></div>
+              <div class="full row"><label class="inline-check"><input type="checkbox" id="fFumante"> Fumante</label><label class="inline-check"><input type="checkbox" id="fGestante"> Gestante</label></div>
+              <div class="full row"><button class="btn primary" type="submit">Salvar paciente</button><span class="small dim">Também consulta o Bloom Filter de CPFs (aba Redis) antes de ir ao banco.</span></div>
+            </form>
+          </div>
+          <div class="card" id="detalhe"></div>
+          <div class="card">
+            <div class="term-head"><span>Console MongoDB (mongosh): comandos executados nesta tela</span><button class="btn ghost sm" data-clear="mongoP" type="button">Limpar</button></div>
+            <div class="term" id="mongoP" aria-live="polite"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =============================== TELA 3: DOCUMENTOS =============================== -->
+    <section data-tab="documentos" aria-label="Documentos e compliance">
+      <div class="grid g2">
+        <div class="card" id="emitirCard">
+          <div class="card-h"><div><h3>Emitir termo de consentimento</h3><p>O termo entra no array <code>documentos[]</code> do próprio paciente</p></div><span class="tag mongo">updateOne + $push</span></div>
+          <form id="formTermo" class="form-grid" novalidate>
+            <div class="field"><label for="tPaciente">Paciente</label><select id="tPaciente"></select></div>
+            <div class="field"><label for="tProc">Procedimento</label><select id="tProc"></select></div>
+            <div class="field"><label for="tProf">Profissional</label><select id="tProf"></select></div>
+            <div class="field" id="tDentesF"><label for="tDentes">Dente(s)</label><input id="tDentes" placeholder="ex.: 18"></div>
+            <div class="field" id="tProdF" hidden><label for="tProduto">Produto</label><input id="tProduto" placeholder="ex.: Botox 100U"></div>
+            <div class="field" id="tLoteF" hidden><label for="tLote">Lote</label><input id="tLote" placeholder="ex.: C1234AB"></div>
+            <div class="field full"><label>Prévia do texto (modelo + variáveis preenchidas)</label><div class="preview-text" id="tPreview"></div></div>
+            <div class="full row"><button class="btn primary" type="submit">Emitir termo</button><span class="small dim" id="tModeloInfo"></span></div>
+          </form>
+        </div>
+        <div class="card">
+          <div class="card-h"><div><h3>A2.1 · Top 5 alergias mais comuns</h3><p>Contagem: desmembra um array de valores e reduz a 5 grupos</p></div><button class="btn sm" data-pipe="a21" type="button">Ver pipeline MongoDB</button></div>
+          <div class="bars" id="a21Bars"></div>
+          <p class="small dim" style="margin-top:10px" id="a21Info"></p>
+          <div class="pipe" id="pipe-a21"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="card-h"><div><h3>A2.2 · Relatório de documentos com contato do paciente</h3><p>Enriquecimento: cada termo embutido no paciente ganha o profissional emissor via <code>$lookup</code> em <code>usuarios</code></p></div><button class="btn sm" data-pipe="a22" type="button">Ver pipeline MongoDB</button></div>
+        <div class="table-wrap"><table id="a22Table"></table></div>
+        <p class="small dim" style="margin-top:10px">Os botões <b>Enviar</b> e <b>Assinar</b> atualizam o item dentro do array com o operador posicional <code>documentos.$</code>, e o pipeline roda de novo.</p>
+        <div class="pipe" id="pipe-a22"></div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="term-head"><span>Console MongoDB (mongosh): comandos executados nesta tela</span><button class="btn ghost sm" data-clear="mongoD" type="button">Limpar</button></div>
+        <div class="term" id="mongoD" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <!-- =============================== TELA 4: REDIS =============================== -->
+    <section data-tab="redis" aria-label="Monitor Redis">
+      <div class="card" style="margin-bottom:16px">
+        <div class="row" style="justify-content:space-between">
+          <div><h3>Monitor Redis (Atividade A3)</h3><p class="small muted">Cada clique executa os comandos no Redis simulado e mostra o comando exato, igual ao <code>redis-cli</code>. As chaves e algoritmos são os mesmos de <code>redis/src/</code>.</p></div>
+          <div class="row">
+            <span class="small muted">Bloom/CMS:</span>
+            <div class="mode" role="group" aria-label="Modo dos comandos probabilísticos">
+              <button type="button" data-mode="nativo" aria-pressed="true">RedisBloom (BF.*/CMS.*)</button>
+              <button type="button" data-mode="manual" aria-pressed="false">Sem módulo (SETBIT/HINCRBY)</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="subtabs" role="tablist">
+        <button role="tab" data-sub="login" aria-selected="true">(a) Cache de login</button>
+        <button role="tab" data-sub="bloom" aria-selected="false">(b) Bloom Filter</button>
+        <button role="tab" data-sub="hll" aria-selected="false">(c) HyperLogLog</button>
+        <button role="tab" data-sub="cms" aria-selected="false">(d) Count-Min Sketch</button>
+      </div>
+
+      <!-- (a) LOGIN -->
+      <div class="subpanel active" data-subpanel="login">
+        <div class="grid g2">
+          <div class="card">
+            <div class="card-h"><div><h3>Login com cache-aside</h3><p>Redis primeiro; se faltar, MongoDB e grava no Redis</p></div><span class="tag redis" id="loginBadge">—</span></div>
+            <div class="form-grid">
+              <div class="field"><label for="lEmail">E-mail</label><select id="lEmail"></select></div>
+              <div class="field"><label for="lSenha">Senha <span class="dim">(demo: Consentio@2026)</span></label><input id="lSenha" value="Consentio@2026"></div>
+            </div>
+            <div class="row" style="margin-top:12px">
+              <button class="btn primary" id="bLogin" type="button">Entrar</button>
+              <button class="btn" id="bReq" type="button">Fazer requisição</button>
+              <button class="btn" id="bLogout" type="button">Logout</button>
+              <button class="btn redis" id="bInval" type="button">Trocar senha (invalidar)</button>
+            </div>
+            <div class="row" style="margin-top:10px">
+              <span class="small muted">Relógio do Redis:</span>
+              <button class="btn sm" data-time="300" type="button">+5 min</button>
+              <button class="btn sm" data-time="900" type="button">+15 min</button>
+              <button class="btn sm" data-time="3600" type="button">+1 h</button>
+              <span class="small dim" id="clockInfo"></span>
+            </div>
+            <div class="stat-row" style="margin-top:14px">
+              <div class="stat"><b id="sDb">0</b><span>consultas ao MongoDB</span></div>
+              <div class="stat"><b id="sLat">—</b><span>tempo do último login</span></div>
+              <div class="stat"><b id="sReq">—</b><span>validar sessão</span></div>
+            </div>
+            <div class="sec-title">Passo a passo do fluxo</div>
+            <ol class="steps">
+              <li><span><code>GET login:falhas:&lt;email&gt;</code>: 5 ou mais erros? Bloqueia (TTL 15 min).</span></li>
+              <li><span><code>HGETALL usuario:email:&lt;email&gt;</code>: achou é <b>HIT</b>; vazio é <b>MISS</b>: busca no MongoDB e grava com <code>HSET</code> + <code>EXPIRE 600</code>.</span></li>
+              <li><span>Confere a senha com o hash scrypt. Errou: <code>INCR</code> no contador (e <code>EXPIRE 900</code> no 1º erro).</span></li>
+              <li><span>Acertou: <code>DEL</code> no contador, <code>HSET sessao:&lt;token&gt;</code> + <code>EXPIRE 3600</code> e <code>SADD</code> no conjunto de sessões.</span></li>
+              <li><span>A cada requisição: <code>HGETALL sessao:&lt;token&gt;</code> + <code>EXPIRE 3600</code> (renova).</span></li>
+              <li><span>Logout: <code>DEL sessao</code>. Troca de senha: apaga o cache e <b>todas</b> as sessões.</span></li>
+            </ol>
+          </div>
+          <div class="card">
+            <div class="card-h"><div><h3>Chaves no Redis agora</h3><p>Tipo, nome e TTL ao vivo · clique para ver o conteúdo</p></div><button class="btn ghost sm" id="bFlush" type="button">Limpar chaves de login</button></div>
+            <div class="keys" id="keysLogin"></div>
+            <div class="term-head"><span>redis-cli</span><button class="btn ghost sm" data-clear="termLogin" type="button">Limpar</button></div>
+            <div class="term" id="termLogin" aria-live="polite"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- (b) BLOOM -->
+      <div class="subpanel" data-subpanel="bloom">
+        <div class="grid g2">
+          <div class="card">
+            <div class="card-h"><div><h3>Bloom Filter: "já existe?"</h3><p>Antes de consultar o MongoDB no cadastro</p></div><span class="tag redis">capacidade 10.000 · erro 1%</span></div>
+            <div class="form-grid">
+              <div class="field"><label for="bfKey">Filtro</label><select id="bfKey"><option value="emails">E-mails de usuários</option><option value="cpfs">CPFs de pacientes (clínica 1)</option></select></div>
+              <div class="field"><label for="bfItem">Item</label><input id="bfItem" value="mayra@sorrisopleno.com.br"></div>
+            </div>
+            <div class="row" style="margin-top:12px">
+              <button class="btn primary" id="bfCheck" type="button">Verificar</button>
+              <button class="btn" id="bfAdd" type="button">Adicionar</button>
+              <button class="btn" id="bfBulk" type="button">+ 10.000 e-mails simulados</button>
+              <button class="btn" id="bfFp" type="button">Teste de falso positivo</button>
+            </div>
+            <div class="sec-title">Os k = 7 bits do item (posições pelas funções hash)</div>
+            <div class="bits" id="bfBits"><span class="small dim">Clique em Verificar.</span></div>
+            <div id="bfVerdict" style="margin-top:10px"></div>
+            <div class="stat-row" style="margin-top:14px">
+              <div class="stat"><b id="bfN">0</b><span>itens inseridos</span></div>
+              <div class="stat"><b id="bfFill">0%</b><span>bits ligados (de 95.851)</span></div>
+              <div class="stat"><b id="bfP">0%</b><span>falso positivo teórico</span></div>
+            </div>
+            <div class="note" style="margin-top:12px"><b>Regra:</b> se <b>algum</b> dos 7 bits está em 0, o item <b>com certeza não existe</b> (nunca há falso negativo). Se <b>todos</b> estão em 1, ele <b>talvez exista</b>, e o sistema confirma no MongoDB. Fórmulas: m = −n·ln(p)/(ln 2)² = 95.851 bits (≈12 KB) e k = (m/n)·ln 2 = 7.</div>
+          </div>
+          <div class="card">
+            <div class="term-head" style="margin-top:0"><span>redis-cli</span><button class="btn ghost sm" data-clear="termBloom" type="button">Limpar</button></div>
+            <div class="term" id="termBloom" style="height:520px" aria-live="polite"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- (c) HLL -->
+      <div class="subpanel" data-subpanel="hll">
+        <div class="grid g2">
+          <div class="card">
+            <div class="card-h"><div><h3>HyperLogLog: quantos únicos?</h3><p>Usuários ativos por dia e na semana</p></div><span class="tag redis">erro padrão 0,81% · máx. 12 KB</span></div>
+            <div class="form-grid">
+              <div class="field"><label for="hDia">Dia</label><select id="hDia"></select></div>
+              <div class="field"><label for="hUser">ID do usuário</label><input id="hUser" value="u1"></div>
+            </div>
+            <div class="row" style="margin-top:12px">
+              <button class="btn primary" id="hAdd" type="button">Registrar acesso (PFADD)</button>
+              <button class="btn" id="hSim" type="button">Simular 3.000 acessos no dia</button>
+              <button class="btn" id="hMerge" type="button">Unir semana (PFMERGE)</button>
+            </div>
+            <div class="table-wrap" style="margin-top:14px"><table id="hTable"></table></div>
+            <div class="sec-title">Memória: 100.000 pacientes únicos</div>
+            <button class="btn" id="hBig" type="button">Simular 100.000 pacientes (HLL × SET exato)</button>
+            <div class="bars" id="hMem" style="margin-top:12px"></div>
+            <div class="note" style="margin-top:12px">O HLL calcula o hash de cada item e guarda, em 16.384 registradores, o maior número de zeros iniciais visto. Repetir o mesmo usuário não muda nada. Ele <b>conta</b>, mas não lista quem são.</div>
+          </div>
+          <div class="card">
+            <div class="term-head" style="margin-top:0"><span>redis-cli</span><button class="btn ghost sm" data-clear="termHll" type="button">Limpar</button></div>
+            <div class="term" id="termHll" style="height:560px" aria-live="polite"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- (d) CMS -->
+      <div class="subpanel" data-subpanel="cms">
+        <div class="grid g2">
+          <div class="card">
+            <div class="card-h"><div><h3>Count-Min Sketch: quantas vezes?</h3><p>Frequência de ações e horário de pico</p></div>
+              <div class="field" style="min-width:200px"><label for="cDim">Tamanho (largura × profundidade)</label><select id="cDim"><option value="2000x5">2000 × 5 (produção)</option><option value="8x2">8 × 2 (pequeno: mostra o erro)</option></select></div>
+            </div>
+            <div class="row"><span class="small muted">Hora do evento:</span><select id="cHora" class="btn sm"></select></div>
+            <div class="row" id="cBtns" style="margin-top:10px"></div>
+            <div class="row" style="margin-top:10px"><button class="btn primary" id="cSim" type="button">Simular 50.000 eventos</button></div>
+            <div class="table-wrap" style="margin-top:14px"><table id="cTable"></table></div>
+            <div class="sec-title">documento_gerado por hora (CMS.QUERY de cada hora)</div>
+            <div class="hbars" id="cHoras"></div>
+            <div class="note" style="margin-top:12px">Matriz de <b>d</b> linhas × <b>w</b> colunas. Incrementar: em cada linha, o hash do item escolhe uma coluna e soma +1. Consultar: devolve o <b>menor</b> contador do item entre as linhas. Colisões só somam, por isso o erro é <b>sempre para cima</b>. Erro ≤ (e/w)·total e confiança 1 − e<sup>−d</sup>.</div>
+          </div>
+          <div class="card">
+            <div class="term-head" style="margin-top:0"><span>redis-cli</span><button class="btn ghost sm" data-clear="termCms" type="button">Limpar</button></div>
+            <div class="term" id="termCms" style="height:560px" aria-live="polite"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+"use strict";
+/* =====================================================================
+   Consentio — demo visual (MongoDB + Redis) 100% no navegador
+   - Dados: os mesmos de scripts/02_inserir_exemplos.js
+   - Pipelines A2: os mesmos de scripts/03_consultas_exemplo.js, executados
+     estágio por estágio aqui em JavaScript
+   - Redis: simulador em memória com os mesmos comandos, chaves e
+     algoritmos de redis/src/cache_login.js e redis/src/probabilisticas.js
+   ===================================================================== */
+
+/* ---------------------------- utilidades ---------------------------- */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const get = (o, path) => path.split(".").reduce((a, k) => (a == null ? undefined : a[k]), o);
+const fmtN = (n) => Number(n).toLocaleString("pt-BR");
+const fmtP = (x) => x.toFixed(2).replace(".", ",") + "%";
+const fmtD = (iso) => iso ? new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—";
+const fmtDT = (iso) => iso ? new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
+const idade = (iso) => { const d = new Date(iso), n = new Date(); let a = n.getFullYear() - d.getFullYear(); if (n < new Date(n.getFullYear(), d.getMonth(), d.getDate())) a--; return a; };
+const hex = (bytes) => [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+const newOid = () => Math.floor(Date.now() / 1000).toString(16).padStart(8, "0") + hex(crypto.getRandomValues(new Uint8Array(8)));
+let toastT;
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 2600); }
+
+/* SHA-256 síncrono (mesmo hash usado em redis/src/probabilisticas.js) */
+const K256 = new Uint32Array([0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2]);
+const W256 = new Uint32Array(64);
+const enc = new TextEncoder();
+function sha256(msg) {
+  const bytes = enc.encode(String(msg)), l = bytes.length, total = ((l + 9 + 63) >> 6) << 6;
+  const buf = new Uint8Array(total); buf.set(bytes); buf[l] = 0x80;
+  const dv = new DataView(buf.buffer);
+  dv.setUint32(total - 4, (l * 8) >>> 0); dv.setUint32(total - 8, Math.floor((l * 8) / 2 ** 32));
+  let h0 = 0x6a09e667, h1 = 0xbb67ae85, h2 = 0x3c6ef372, h3 = 0xa54ff53a, h4 = 0x510e527f, h5 = 0x9b05688c, h6 = 0x1f83d9ab, h7 = 0x5be0cd19;
+  const r = (x, n) => (x >>> n) | (x << (32 - n));
+  for (let o = 0; o < total; o += 64) {
+    for (let i = 0; i < 16; i++) W256[i] = dv.getUint32(o + i * 4);
+    for (let i = 16; i < 64; i++) {
+      const a = W256[i - 15], b = W256[i - 2];
+      W256[i] = (W256[i - 16] + (r(a, 7) ^ r(a, 18) ^ (a >>> 3)) + W256[i - 7] + (r(b, 17) ^ r(b, 19) ^ (b >>> 10))) >>> 0;
+    }
+    let a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, h = h7;
+    for (let i = 0; i < 64; i++) {
+      const t1 = (h + (r(e, 6) ^ r(e, 11) ^ r(e, 25)) + ((e & f) ^ (~e & g)) + K256[i] + W256[i]) >>> 0;
+      const t2 = ((r(a, 2) ^ r(a, 13) ^ r(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) >>> 0;
+      h = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+    }
+    h0 = (h0 + a) >>> 0; h1 = (h1 + b) >>> 0; h2 = (h2 + c) >>> 0; h3 = (h3 + d) >>> 0;
+    h4 = (h4 + e) >>> 0; h5 = (h5 + f) >>> 0; h6 = (h6 + g) >>> 0; h7 = (h7 + h) >>> 0;
+  }
+  const out = new Uint8Array(32), ov = new DataView(out.buffer);
+  [h0, h1, h2, h3, h4, h5, h6, h7].forEach((v, i) => ov.setUint32(i * 4, v));
+  return out;
+}
+/* doisHashes(): igual a redis/src/probabilisticas.js — double hashing h1 + i*h2 */
+function doisHashes(item) {
+  const d = sha256(item), v = new DataView(d.buffer);
+  return [v.getUint32(0), (v.getUint32(4) | 1) >>> 0];
+}
+
+/* Destaque de sintaxe para JSON no estilo mongosh */
+const OID_KEY = /(^_id$|_id$|^id$)/;
+const DATE_KEYS = new Set(["data", "inicio", "fim", "gerado_em", "criado_em", "atualizado_em", "assinado_em", "data_nascimento", "validade", "retorno_previsto", "ocorrido_em", "data_geracao"]);
+function shell(v, key = "", ind = 0) {
+  const pad = "  ".repeat(ind), pad2 = "  ".repeat(ind + 1);
+  if (v === null || v === undefined) return '<span class="nu">null</span>';
+  if (typeof v === "string") {
+    if (OID_KEY.test(key) && /^[0-9a-f]{24}$/.test(v)) return `<span class="f">ObjectId</span>(<span class="s">"${v}"</span>)`;
+    if (DATE_KEYS.has(key) && /^\d{4}-\d{2}-\d{2}/.test(v)) return `<span class="f">ISODate</span>(<span class="s">"${esc(v)}"</span>)`;
+    return `<span class="s">"${esc(v.length > 140 ? v.slice(0, 140) + "…" : v)}"</span>`;
+  }
+  if (typeof v === "number" || typeof v === "boolean") return `<span class="nu">${v}</span>`;
+  if (Array.isArray(v)) {
+    if (!v.length) return "[]";
+    if (v.every((x) => typeof x !== "object" || x === null) && JSON.stringify(v).length < 70) return "[ " + v.map((x) => shell(x, key, 0)).join(", ") + " ]";
+    return "[\n" + v.map((x) => pad2 + shell(x, key, ind + 1)).join(",\n") + "\n" + pad + "]";
+  }
+  const ks = Object.keys(v);
+  if (!ks.length) return "{}";
+  return "{\n" + ks.map((k) => `${pad2}<span class="k">${esc(k)}</span>: ${shell(v[k], k, ind + 1)}`).join(",\n") + "\n" + pad + "}";
+}
+/* texto simples (para comandos no console) */
+function plain(v, key = "") { return shell(v, key).replace(/<[^>]+>/g, "").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&#39;/g, "'"); }
+function hiCode(src) {
+  return esc(src)
+    .replace(/(\/\/[^\n]*)/g, '<span class="c">$1</span>')
+    .replace(/(&quot;[^&\n]*?&quot;)/g, '<span class="s">$1</span>')
+    .replace(/(\$[a-zA-Z]+)/g, '<span class="k">$1</span>');
+}
+
+/* ===================================================================
+   DADOS — iguais a scripts/02_inserir_exemplos.js
+   =================================================================== */
+const SEED = {
+  planos: [
+    { _id: "65a000000000000000000001", codigo: "basico", nome: "Básico", preco_mensal: 0, limites: { pacientes: 2, documentos_mes: 5 } },
+    { _id: "65a000000000000000000002", codigo: "essencial", nome: "Essencial", preco_mensal: 59.9, limites: { pacientes: 60, documentos_mes: null } },
+    { _id: "65a000000000000000000003", codigo: "business", nome: "Business", preco_mensal: 119.9, limites: { pacientes: null, documentos_mes: null } },
+  ],
+  clinicas: [
+    { _id: "65b000000000000000000001", nome: "Clínica Sorriso Pleno", endereco: { cidade: "Uberlândia", uf: "MG" }, assinatura: { plano_id: "65a000000000000000000003", status: "ativa" }, uso_mes: { referencia: "2026-11", documentos_gerados: 3 } },
+    { _id: "65b000000000000000000002", nome: "Consultório Dra. Paula Lima", endereco: { cidade: "Uberlândia", uf: "MG" }, assinatura: { plano_id: "65a000000000000000000001", status: "trial" }, uso_mes: { referencia: "2026-11", documentos_gerados: 0 } },
+  ],
+  usuarios: [
+    { _id: "65c000000000000000000001", clinica_id: "65b000000000000000000001", nome: "Dra. Mayra Oliveira", email: "mayra@sorrisopleno.com.br", papel: "administrador", cro: { numero: "45678", uf: "MG" }, ativo: true,
+      senha_hash: "scrypt$c0ffee00000000000000000000000000$e04903ce8b5d5356078cc783a0fbbad155781096c186b7b161bfca00acd9c88dce03c0f1967ffd065205f0497f5895b9e1060f6a3a91d0954828f4f2012b1561" },
+    { _id: "65c000000000000000000002", clinica_id: "65b000000000000000000001", nome: "Dr. Lucas Ferreira", email: "lucas@sorrisopleno.com.br", papel: "dentista", cro: { numero: "51234", uf: "MG" }, ativo: true,
+      senha_hash: "scrypt$c0ffee10000000000000000000000000$28633f07232fe6aff69d3ce473db88b00975830fb31278d77dea53c5f8167ae143cfcc7794ece4734faf03113117140a848d96f5b740c3460028b2bfb60b801b" },
+    { _id: "65c000000000000000000003", clinica_id: "65b000000000000000000001", nome: "Júlia Martins", email: "recepcao@sorrisopleno.com.br", papel: "secretaria", ativo: true,
+      senha_hash: "scrypt$c0ffee20000000000000000000000000$789b60f0d1ce9c8dadef3c91d9a863fd882dfa346f688f8e859b5faded83bb919466d018f2df618ba96d274187469ca869079fd147c135b3fd0e261c5b58a139" },
+    { _id: "65c000000000000000000004", clinica_id: "65b000000000000000000002", nome: "Dra. Paula Lima", email: "paula.lima.odonto@email.com", papel: "administrador", cro: { numero: "60321", uf: "MG" }, ativo: true,
+      senha_hash: "scrypt$c0ffee30000000000000000000000000$c9e91cb98e90a573b08a6ff080440d6845e76e6d6f129c9ad203343027209916a3abdfec72a1dbb8706c7795b7a0dab516636742d3de641b82139e4c1f90d525" },
+  ],
+  modelos_documentos: [
+    { _id: "65e000000000000000000001", titulo: "Termo de Consentimento — Exodontia", versao: 2,
+      conteudo: "Eu, {{paciente.nome}}, CPF {{paciente.cpf}}, autorizo o(a) {{profissional.nome}} (CRO {{profissional.cro}}) a realizar a extração do(s) dente(s) {{procedimento.dentes}}. Fui informado(a) sobre riscos como dor, inchaço, sangramento e parestesia, e sobre os cuidados pós-operatórios. {{clinica.cidade}}, {{data}}." },
+    { _id: "65e000000000000000000002", titulo: "Termo de Consentimento — Clareamento Dental", versao: 1,
+      conteudo: "Eu, {{paciente.nome}}, declaro estar ciente de que o clareamento pode causar sensibilidade temporária e que restaurações e coroas não mudam de cor. {{clinica.cidade}}, {{data}}." },
+    { _id: "65e000000000000000000003", titulo: "Termo de Consentimento — Toxina Botulínica", versao: 3,
+      conteudo: "Eu, {{paciente.nome}}, autorizo a aplicação de toxina botulínica ({{produto.nome}}, lote {{produto.lote}}) nas regiões indicadas no mapa de aplicação. Fui informado(a) de que o efeito é temporário e pode haver assimetria, edema ou ptose transitória. {{clinica.cidade}}, {{data}}." },
+    { _id: "65e000000000000000000004", titulo: "Termo de Consentimento — Preenchimento com Ácido Hialurônico", versao: 1,
+      conteudo: "Eu, {{paciente.nome}}, autorizo o preenchimento com ácido hialurônico ({{produto.nome}}, lote {{produto.lote}}). Estou ciente dos riscos de edema, hematoma e, raramente, oclusão vascular. {{clinica.cidade}}, {{data}}." },
+    { _id: "65e000000000000000000005", titulo: "Termo de Consentimento — Tratamento Endodôntico", versao: 1,
+      conteudo: "Eu, {{paciente.nome}}, autorizo o tratamento de canal no dente {{procedimento.dentes}}, ciente de que podem ser necessárias várias sessões e, em alguns casos, retratamento. {{clinica.cidade}}, {{data}}." },
+  ],
+  procedimentos: [
+    { _id: "65f000000000000000000001", codigo: "CIR-001", nome: "Exodontia simples", modelo_documento_id: "65e000000000000000000001" },
+    { _id: "65f000000000000000000002", codigo: "DEN-010", nome: "Clareamento dental de consultório", modelo_documento_id: "65e000000000000000000002" },
+    { _id: "65f000000000000000000003", codigo: "HOF-001", nome: "Aplicação de toxina botulínica", modelo_documento_id: "65e000000000000000000003" },
+    { _id: "65f000000000000000000004", codigo: "HOF-002", nome: "Preenchimento labial com ácido hialurônico", modelo_documento_id: "65e000000000000000000004" },
+    { _id: "65f000000000000000000005", codigo: "END-001", nome: "Tratamento endodôntico (molar)", modelo_documento_id: "65e000000000000000000005" },
+    { _id: "65f000000000000000000006", codigo: "CLI-001", nome: "Profilaxia (limpeza)", modelo_documento_id: null },
+  ],
+  pacientes: [
+    {
+      _id: "65d000000000000000000001", clinica_id: "65b000000000000000000001", nome: "Ana Beatriz Souza", cpf: "123.456.789-09",
+      data_nascimento: "1992-04-15T00:00:00Z", sexo: "F",
+      contato: { telefone: "(34) 99999-1111", email: "ana.souza@email.com" },
+      endereco: { logradouro: "Rua Goiás", numero: "88", bairro: "Centro", cidade: "Uberlândia", uf: "MG", cep: "38400-027" },
+      ficha: { anamnese: { alergias: ["dipirona"], medicamentos_em_uso: [], doencas_preexistentes: [], gestante: false, fumante: false, observacoes: "Ansiedade em procedimentos longos." }, convenio: null },
+      tags: ["harmonizacao"],
+      documentos: [
+        { _id: "660000000000000000000001", profissional_id: "65c000000000000000000001", procedimento_id: "65f000000000000000000003",
+          modelo: { id: "65e000000000000000000003", titulo: "Termo de Consentimento — Toxina Botulínica", versao: 3 },
+          conteudo_renderizado: "Eu, Ana Beatriz Souza, autorizo a aplicação de toxina botulínica (Botox 100U, lote C1234AB) nas regiões indicadas no mapa de aplicação. Fui informado(a) de que o efeito é temporário e pode haver assimetria, edema ou ptose transitória. Uberlândia, 28/10/2026.",
+          status: "assinado", assinatura: { assinado_em: "2026-10-28T15:05:00Z", metodo: "presencial_tablet", ip: "177.10.20.30" },
+          hash_sha256: "62644f687e6ee0b0e0e3032738abac4d4d1d2513279c38b373750eb07113d8e7", gerado_em: "2026-10-28T14:55:00Z" },
+      ],
+      agendamentos: [
+        { _id: "661000000000000000000001", profissional_id: "65c000000000000000000001", procedimento_id: "65f000000000000000000003", inicio: "2026-10-28T14:30:00Z", fim: "2026-10-28T15:30:00Z", status: "realizado", criado_em: "2026-10-20T13:05:00Z" },
+        { _id: "661000000000000000000002", profissional_id: "65c000000000000000000001", procedimento_id: "65f000000000000000000003", inicio: "2026-11-12T14:30:00Z", fim: "2026-11-12T15:00:00Z", status: "confirmado", observacoes: "Retorno de 15 dias para avaliação da toxina.", criado_em: "2026-10-28T15:20:00Z" },
+      ],
+      odontogramas: [],
+      mapas_faciais: [
+        { _id: "663000000000000000000001", profissional_id: "65c000000000000000000001", tipo: "toxina", data: "2026-10-28T15:00:00Z",
+          produto: { nome: "Botox 100U", lote: "C1234AB", validade: "2027-09-30T00:00:00Z" },
+          pontos: [ { regiao: "frontal", unidades: 10, x: 50, y: 18 }, { regiao: "glabela", unidades: 20, x: 50, y: 30 }, { regiao: "orbicular direito (pés de galinha)", unidades: 8, x: 78, y: 36 }, { regiao: "orbicular esquerdo (pés de galinha)", unidades: 8, x: 22, y: 36 } ],
+          retorno_previsto: "2026-11-12T14:30:00Z", observacoes: "Total aplicado: 46U." },
+        { _id: "663000000000000000000002", profissional_id: "65c000000000000000000001", tipo: "preenchimento", data: "2026-09-15T15:00:00Z",
+          produto: { nome: "Ácido hialurônico 1 mL", lote: "AH98765", validade: "2027-12-31T00:00:00Z" },
+          pontos: [ { regiao: "lábio superior", volume_ml: 0.5, x: 50, y: 72 }, { regiao: "lábio inferior", volume_ml: 0.4, x: 50, y: 77 } ] },
+      ],
+      criado_em: "2026-10-20T13:00:00Z", atualizado_em: "2026-10-28T15:10:00Z",
+    },
+    {
+      _id: "65d000000000000000000002", clinica_id: "65b000000000000000000001", nome: "Carlos Eduardo Ribeiro", cpf: "987.654.321-00",
+      data_nascimento: "1978-11-02T00:00:00Z", sexo: "M", contato: { telefone: "(34) 98888-2222" },
+      ficha: { anamnese: { alergias: [], medicamentos_em_uso: ["losartana 50mg"], doencas_preexistentes: ["hipertensão"], gestante: false, fumante: true }, convenio: "OdontoPrev" },
+      tags: ["endodontia"],
+      documentos: [
+        { _id: "660000000000000000000002", profissional_id: "65c000000000000000000002", procedimento_id: "65f000000000000000000005",
+          modelo: { id: "65e000000000000000000005", titulo: "Termo de Consentimento — Tratamento Endodôntico", versao: 1 },
+          conteudo_renderizado: "Eu, Carlos Eduardo Ribeiro, autorizo o tratamento de canal no dente 36, ciente de que podem ser necessárias várias sessões e, em alguns casos, retratamento. Uberlândia, 30/10/2026.",
+          status: "assinado", assinatura: { assinado_em: "2026-10-30T11:50:00Z", metodo: "presencial_papel" },
+          hash_sha256: "6825460ecd668106742a7c5563464a0a82891befa9b71e705f09d921291be413", gerado_em: "2026-10-30T11:40:00Z" },
+        { _id: "660000000000000000000003", profissional_id: "65c000000000000000000002", procedimento_id: "65f000000000000000000001",
+          modelo: { id: "65e000000000000000000001", titulo: "Termo de Consentimento — Exodontia", versao: 2 },
+          conteudo_renderizado: "Eu, Carlos Eduardo Ribeiro, CPF 987.654.321-00, autorizo o(a) Dr. Lucas Ferreira (CRO MG 51234) a realizar a extração do(s) dente(s) 18. Fui informado(a) sobre riscos como dor, inchaço, sangramento e parestesia, e sobre os cuidados pós-operatórios. Uberlândia, 03/11/2026.",
+          status: "enviado", hash_sha256: "904060c09cde36416ea258dd1fba1adc11bc4861723c074dc604c75814e79b9d", gerado_em: "2026-11-03T12:15:00Z" },
+      ],
+      agendamentos: [
+        { _id: "661000000000000000000003", profissional_id: "65c000000000000000000002", procedimento_id: "65f000000000000000000001", inicio: "2026-11-05T13:00:00Z", fim: "2026-11-05T14:00:00Z", status: "agendado", criado_em: "2026-11-03T12:20:00Z" },
+      ],
+      odontogramas: [
+        { _id: "662000000000000000000001", profissional_id: "65c000000000000000000002", data: "2026-10-30T11:30:00Z",
+          dentes: [ { numero: 18, condicao: "extracao_indicada", observacao: "Terceiro molar semi-incluso." }, { numero: 16, faces: ["oclusal"], condicao: "restaurado" }, { numero: 36, condicao: "canal", observacao: "Tratamento endodôntico iniciado." }, { numero: 46, faces: ["mesial", "oclusal"], condicao: "carie" }, { numero: 47, condicao: "ausente" } ],
+          observacoes: "Planejar restauração do 46 após o canal do 36." },
+      ],
+      mapas_faciais: [],
+      criado_em: "2026-09-12T17:20:00Z", atualizado_em: "2026-10-30T12:00:00Z",
+    },
+    {
+      _id: "65d000000000000000000003", clinica_id: "65b000000000000000000001", nome: "Helena Costa Almeida",
+      data_nascimento: "2015-06-30T00:00:00Z", sexo: "F", contato: { telefone: "(34) 97777-3333" },
+      responsavel_legal: { nome: "Fernanda Costa Almeida", cpf: "111.222.333-44", parentesco: "mãe" },
+      ficha: { anamnese: { alergias: ["látex"], medicamentos_em_uso: [], doencas_preexistentes: [] } },
+      documentos: [],
+      agendamentos: [
+        { _id: "661000000000000000000004", profissional_id: "65c000000000000000000002", procedimento_id: "65f000000000000000000006", inicio: "2026-11-04T19:00:00Z", fim: "2026-11-04T19:40:00Z", status: "agendado", observacoes: "Paciente alérgica a látex — usar luvas nitrílicas.", criado_em: "2026-10-05T14:10:00Z" },
+      ],
+      odontogramas: [
+        { _id: "662000000000000000000002", profissional_id: "65c000000000000000000002", data: "2026-10-05T14:20:00Z",
+          dentes: [ { numero: 55, faces: ["oclusal"], condicao: "carie" }, { numero: 11, condicao: "higido" }, { numero: 21, condicao: "higido" } ] },
+      ],
+      mapas_faciais: [],
+      criado_em: "2026-10-05T14:00:00Z",
+    },
+    {
+      _id: "65d000000000000000000004", clinica_id: "65b000000000000000000002", nome: "Pedro Henrique Nunes", cpf: "555.666.777-88",
+      data_nascimento: "1999-01-21T00:00:00Z", sexo: "M", contato: { email: "pedro.nunes@email.com" },
+      documentos: [],
+      agendamentos: [
+        { _id: "661000000000000000000005", profissional_id: "65c000000000000000000004", procedimento_id: "65f000000000000000000002", inicio: "2026-11-06T12:00:00Z", fim: "2026-11-06T13:30:00Z", status: "agendado", criado_em: "2026-10-26T10:05:00Z" },
+      ],
+      odontogramas: [], mapas_faciais: [],
+      criado_em: "2026-10-26T10:00:00Z",
+    },
+  ],
+};
+let DB = clone(SEED);
+const byId = (col, id) => DB[col].find((d) => d._id === id);
+const SENHA_DEMO = "Consentio@2026";
+
+/* ---------------------------- consoles ---------------------------- */
+function termWrite(id, html) { const t = document.getElementById(id); t.insertAdjacentHTML("beforeend", html + "\n"); t.scrollTop = t.scrollHeight; }
+function mongoLog(id, cmd, result, comment) {
+  let h = "";
+  if (comment) h += `<span class="cmt">// ${esc(comment)}</span>\n`;
+  h += `<span class="mcmd">${esc(cmd)}</span>`;
+  if (result !== undefined) h += `\n<span class="${/^(MongoServerError|Erro)/.test(result) ? "err" : "res"}">${esc(result)}</span>`;
+  termWrite(id, h);
+}
+
+/* ===================================================================
+   PIPELINES A2 — mesmo texto de scripts/03_consultas_exemplo.js,
+   executados estágio por estágio
+   =================================================================== */
+const PIPES = {
+  a21: {
+    titulo: "A2.1 Top 5 alergias mais comuns",
+    colecao: "pacientes",
+    stages: [
+      { op: "$match", code: '{ $match: { "ficha.anamnese.alergias.0": { $exists: true } } }',
+        exp: "Filtra: só passam pacientes que têm pelo menos 1 alergia (o índice .0 do array existe).",
+        run: (ds) => ds.filter((p) => (get(p, "ficha.anamnese.alergias") || []).length > 0),
+        show: (d) => ({ _id: d._id, nome: d.nome, "ficha.anamnese.alergias": d.ficha.anamnese.alergias }) },
+      { op: "$unwind", code: '{ $unwind: "$ficha.anamnese.alergias" }',
+        exp: "Desmembra o array: um paciente com N alergias vira N documentos, cada um com UMA alergia (agora uma string).",
+        run: (ds) => ds.flatMap((p) => p.ficha.anamnese.alergias.map((a) => ({ ...p, ficha: { ...p.ficha, anamnese: { ...p.ficha.anamnese, alergias: a } } }))),
+        show: (d) => ({ _id: d._id, nome: d.nome, "ficha.anamnese.alergias": d.ficha.anamnese.alergias }) },
+      { op: "$group", code: '{ $group: { _id: { $toLower: "$ficha.anamnese.alergias" }, total_pacientes: { $sum: 1 } } }',
+        exp: "Agrupa pela alergia (em minúsculas, para \"Dipirona\" e \"dipirona\" contarem juntas) e soma 1 por documento.",
+        run: (ds) => { const m = new Map(); ds.forEach((d) => { const k = String(d.ficha.anamnese.alergias).toLowerCase(); m.set(k, (m.get(k) || 0) + 1); }); return [...m].map(([k, v]) => ({ _id: k, total_pacientes: v })); },
+        show: (d) => d },
+      { op: "$sort", code: "{ $sort: { total_pacientes: -1, _id: 1 } }",
+        exp: "Ordena da mais comum para a menos comum; empate em ordem alfabética.",
+        run: (ds) => [...ds].sort((a, b) => b.total_pacientes - a.total_pacientes || a._id.localeCompare(b._id)), show: (d) => d },
+      { op: "$limit", code: "{ $limit: 5 }", exp: "Mantém só as 5 primeiras.", run: (ds) => ds.slice(0, 5), show: (d) => d },
+      { op: "$project", code: '{ $project: { _id: 0, alergia: "$_id", total_pacientes: 1 } }',
+        exp: "Renomeia _id para alergia e esconde o _id na saída.",
+        run: (ds) => ds.map((d) => ({ total_pacientes: d.total_pacientes, alergia: d._id })), show: (d) => d },
+    ],
+  },
+  a22: {
+    titulo: "A2.2 Relatório de documentos com contato do paciente",
+    colecao: "pacientes",
+    stages: [
+      { op: "$match", code: '{ $match: { "documentos.0": { $exists: true } } }',
+        exp: "Só pacientes que têm algum termo gerado.",
+        run: (ds) => ds.filter((p) => (p.documentos || []).length > 0),
+        show: (d) => ({ _id: d._id, nome: d.nome, documentos: `[ ${d.documentos.length} item(ns) ]` }) },
+      { op: "$unwind", code: '{ $unwind: "$documentos" }',
+        exp: "Cada termo embutido vira um item separado. O nome, CPF e telefone do paciente vêm junto, sem buscar em lugar nenhum.",
+        run: (ds) => ds.flatMap((p) => p.documentos.map((doc) => ({ ...p, documentos: doc }))),
+        show: (d) => ({ nome: d.nome, cpf: d.cpf, "contato.telefone": get(d, "contato.telefone"), "documentos.status": d.documentos.status, "documentos.profissional_id": d.documentos.profissional_id }) },
+      { op: "$lookup", code: '{ $lookup: { from: "usuarios", localField: "documentos.profissional_id", foreignField: "_id", as: "profissional" } }',
+        exp: "Busca na coleção usuarios o documento cujo _id = documentos.profissional_id. O resultado chega como um array em \"profissional\".",
+        run: (ds) => ds.map((d) => ({ ...d, profissional: DB.usuarios.filter((u) => u._id === d.documentos.profissional_id).map(({ senha_hash, ...u }) => u) })),
+        show: (d) => ({ nome: d.nome, "documentos.status": d.documentos.status, profissional: d.profissional.map((u) => ({ _id: u._id, nome: u.nome, cro: u.cro })) }) },
+      { op: "$unwind", code: '{ $unwind: "$profissional" }',
+        exp: "O $lookup devolve um array de 1 elemento; o $unwind transforma em objeto único.",
+        run: (ds) => ds.flatMap((d) => d.profissional.map((u) => ({ ...d, profissional: u }))),
+        show: (d) => ({ nome: d.nome, "documentos.status": d.documentos.status, profissional: { nome: d.profissional.nome, cro: d.profissional.cro } }) },
+      { op: "$sort", code: '{ $sort: { "documentos.gerado_em": -1 } }', exp: "Termos mais recentes primeiro.",
+        run: (ds) => [...ds].sort((a, b) => b.documentos.gerado_em.localeCompare(a.documentos.gerado_em)),
+        show: (d) => ({ nome: d.nome, "documentos.gerado_em": d.documentos.gerado_em }) },
+      { op: "$project", code: `{ $project: {
+    _id: 0,
+    status_documento: "$documentos.status",
+    documento: "$documentos.modelo.titulo",
+    data_geracao: "$documentos.gerado_em",
+    paciente_nome: "$nome",
+    paciente_cpf: { $ifNull: ["$cpf", "não informado"] },
+    paciente_telefone: { $ifNull: ["$contato.telefone", "não informado"] },
+    profissional: "$profissional.nome",
+    cro: { $concat: ["$profissional.cro.uf", " ", "$profissional.cro.numero"] },
+} }`,
+        exp: "Monta a saída final: esconde os ObjectIds e escolhe/renomeia só os campos do relatório.",
+        run: (ds) => ds.map((d) => ({
+          status_documento: d.documentos.status, documento: d.documentos.modelo.titulo, data_geracao: d.documentos.gerado_em,
+          paciente_nome: d.nome, paciente_cpf: d.cpf ?? "não informado", paciente_telefone: get(d, "contato.telefone") ?? "não informado",
+          profissional: d.profissional.nome, cro: d.profissional.cro ? `${d.profissional.cro.uf} ${d.profissional.cro.numero}` : null,
+          _doc: d.documentos._id, _pac: d._id,
+        })),
+        show: (d) => { const { _doc, _pac, ...r } = d; return r; } },
+    ],
+  },
+};
+function runPipeline(key) {
+  const p = PIPES[key]; let ds = clone(DB[p.colecao]); const trace = [];
+  for (const s of p.stages) { const entrada = ds.length; ds = s.run(ds); trace.push({ s, entrada, saida: ds.length, amostra: ds.slice(0, 4).map(s.show) }); }
+  return { result: ds, trace };
+}
+function pipelineSource(key) {
+  const p = PIPES[key];
+  return `db.getSiblingDB("consentio").${p.colecao}.aggregate([\n` + p.stages.map((s) => "  " + s.code.replace(/\n/g, "\n  ")).join(",\n") + "\n])";
+}
+function renderPipe(key) {
+  const box = document.getElementById("pipe-" + key);
+  if (!box.classList.contains("open")) return;
+  const { trace } = runPipeline(key);
+  box.innerHTML = `
+    <div class="row" style="justify-content:space-between;margin-bottom:8px"><h4>Pipeline completo (igual a <code>scripts/03_consultas_exemplo.js</code>)</h4><span class="tag mongo">${PIPES[key].stages.length} estágios</span></div>
+    <pre class="code">${hiCode(pipelineSource(key))}</pre>
+    <h4 style="margin:16px 0 4px">Executando estágio por estágio com os dados atuais</h4>
+    ${trace.map((t, i) => `
+      <div class="stage">
+        <div class="n">${i + 1}</div>
+        <div>
+          <div class="row" style="gap:8px"><span class="op">${t.s.op}</span><span class="flow">${t.entrada} documento(s) entram → ${t.saida} saem</span></div>
+          <div class="small muted" style="margin-top:2px">${esc(t.s.exp)}</div>
+          <pre class="code" style="max-height:120px;margin-top:6px">${hiCode(t.s.code)}</pre>
+          <details ${i === trace.length - 1 ? "open" : ""}><summary>Ver saída deste estágio${t.saida > 4 ? " (4 primeiros)" : ""}</summary><pre class="code">${t.amostra.length ? t.amostra.map((d) => shell(d)).join("\n") : "// nenhum documento"}</pre></details>
+        </div>
+      </div>`).join("")}`;
+}
+
+/* ===================================================================
+   REDIS simulado — mesmos comandos do redis-cli
+   =================================================================== */
+class MiniRedis {
+  constructor() { this.m = new Map(); this.offset = 0; }
+  now() { return Date.now() + this.offset; }
+  e(k) { const x = this.m.get(k); if (!x) return null; if (x.exp && x.exp <= this.now()) { this.m.delete(k); return null; } return x; }
+  set(k, type, val) { const old = this.e(k); const x = { type, val, exp: old && old.type === type ? old.exp : null }; this.m.set(k, x); return x; }
+  keys(prefix) { return [...this.m.keys()].filter((k) => k.startsWith(prefix) && this.e(k)).sort(); }
+  ttl(k) { const x = this.e(k); if (!x) return -2; if (!x.exp) return -1; return Math.ceil((x.exp - this.now()) / 1000); }
+  exec(a) {
+    const C = a[0].toUpperCase(), k = a[1];
+    const wrong = () => { throw new Error("WRONGTYPE Operation against a key holding the wrong kind of value"); };
+    const h = () => { const x = this.e(k); if (x && x.type !== "hash") wrong(); return x; };
+    switch (C) {
+      case "HSET": { let x = h(); if (!x) x = this.set(k, "hash", new Map()); let n = 0; for (let i = 2; i < a.length; i += 2) { if (!x.val.has(a[i])) n++; x.val.set(a[i], String(a[i + 1])); } return n; }
+      case "HGETALL": { const x = h(); return x ? [...x.val].flat() : []; }
+      case "HMGET": { const x = h(); return a.slice(2).map((f) => (x && x.val.has(f) ? x.val.get(f) : null)); }
+      case "HINCRBY": { let x = h(); if (!x) x = this.set(k, "hash", new Map()); const v = Number(x.val.get(a[2]) || 0) + Number(a[3]); x.val.set(a[2], String(v)); return v; }
+      case "EXPIRE": { const x = this.e(k); if (!x) return 0; x.exp = this.now() + Number(a[2]) * 1000; return 1; }
+      case "TTL": return this.ttl(k);
+      case "DEL": return a.slice(1).filter((kk) => this.e(kk) && this.m.delete(kk)).length;
+      case "EXISTS": return a.slice(1).filter((kk) => this.e(kk)).length;
+      case "GET": { const x = this.e(k); if (!x) return null; if (x.type !== "string") wrong(); return String(x.val); }
+      case "INCR": { const x = this.e(k); if (x && x.type !== "string") wrong(); const v = Number(x ? x.val : 0) + 1; if (x) x.val = v; else this.set(k, "string", v); return v; }
+      case "SADD": { let x = this.e(k); if (!x) x = this.set(k, "set", new Set()); let n = 0; a.slice(2).forEach((v) => { if (!x.val.has(v)) { x.val.add(v); n++; } }); return n; }
+      case "SREM": { const x = this.e(k); if (!x) return 0; let n = 0; a.slice(2).forEach((v) => { if (x.val.delete(v)) n++; }); if (!x.val.size) this.m.delete(k); return n; }
+      case "SMEMBERS": { const x = this.e(k); return x ? [...x.val] : []; }
+      case "SCARD": { const x = this.e(k); return x ? x.val.size : 0; }
+      case "SETBIT": { let x = this.e(k); if (!x) x = this.set(k, "string", new Uint8Array(0)); const off = Number(a[2]), byte = off >> 3; if (byte >= x.val.length) { const nb = new Uint8Array(byte + 1); nb.set(x.val); x.val = nb; } const mask = 0x80 >> (off & 7), old = x.val[byte] & mask ? 1 : 0; if (Number(a[3])) x.val[byte] |= mask; else x.val[byte] &= ~mask; return old; }
+      case "GETBIT": { const x = this.e(k); if (!x) return 0; const off = Number(a[2]), byte = off >> 3; return byte < x.val.length && x.val[byte] & (0x80 >> (off & 7)) ? 1 : 0; }
+      case "BITCOUNT": { const x = this.e(k); if (!x) return 0; let n = 0; for (const b of x.val) { let v = b; while (v) { n += v & 1; v >>= 1; } } return n; }
+      case "PFADD": { let x = this.e(k); if (!x) x = this.set(k, "hll", new HLL()); let ch = 0; a.slice(2).forEach((v) => { ch |= x.val.add(v); }); return ch; }
+      case "PFCOUNT": { const u = new HLL(); a.slice(1).forEach((kk) => { const x = this.e(kk); if (x) u.merge(x.val); }); return u.count(); }
+      case "PFMERGE": { const u = new HLL(); a.slice(1).forEach((kk) => { const x = this.e(kk); if (x) u.merge(x.val); }); const ex = this.e(k); this.m.set(k, { type: "hll", val: u, exp: ex ? ex.exp : null }); return "OK"; }
+      case "BF.RESERVE": { if (this.e(k)) throw new Error("ERR item exists"); const p = Number(a[2]), n = Number(a[3]); const m = Math.ceil((-n * Math.log(p)) / Math.LN2 ** 2); this.set(k, "MBbloom--", { m, k: Math.round((m / n) * Math.LN2), bits: new Uint8Array(Math.ceil(m / 8)), n: 0 }); return "OK"; }
+      case "BF.ADD": return this.bfAdd(k, a[2]);
+      case "BF.MADD": return a.slice(2).map((v) => this.bfAdd(k, v));
+      case "BF.EXISTS": return this.bfHas(k, a[2]);
+      case "BF.MEXISTS": return a.slice(2).map((v) => this.bfHas(k, v));
+      case "CMS.INITBYDIM": { if (this.e(k)) throw new Error("CMS: key already exists"); this.set(k, "CMSk-TYPE", { w: Number(a[2]), d: Number(a[3]), c: new Float64Array(Number(a[2]) * Number(a[3])) }); return "OK"; }
+      case "CMS.INCRBY": { const x = this.e(k); if (!x) throw new Error("CMS: key does not exist"); const out = []; for (let i = 2; i < a.length; i += 2) { const cols = colunas(a[i], x.val.w, x.val.d); cols.forEach((c, r) => { x.val.c[r * x.val.w + c] += Number(a[i + 1]); }); out.push(Math.min(...cols.map((c, r) => x.val.c[r * x.val.w + c]))); } return out; }
+      case "CMS.QUERY": { const x = this.e(k); if (!x) throw new Error("CMS: key does not exist"); return a.slice(2).map((it) => { const cols = colunas(it, x.val.w, x.val.d); return Math.min(...cols.map((c, r) => x.val.c[r * x.val.w + c])); }); }
+      case "MEMORY": { const x = this.e(a[2]); if (!x) return null; return memUsage(x); }
+      case "MULTI": return "OK";
+      default: throw new Error(`ERR unknown command '${a[0]}'`);
+    }
+  }
+  bfMeta(k) { const x = this.e(k); if (!x) throw new Error("ERR not found"); return x.val; }
+  bfAdd(k, item) { let x = this.e(k); if (!x) { this.exec(["BF.RESERVE", k, "0.01", "100"]); x = this.e(k); } const b = x.val; let novo = 0; posicoes(item, b.m, b.k).forEach((p) => { const by = p >> 3, mk = 0x80 >> (p & 7); if (!(b.bits[by] & mk)) { novo = 1; b.bits[by] |= mk; } }); if (novo) b.n++; return novo; }
+  bfHas(k, item) { const x = this.e(k); if (!x) return 0; const b = x.val; return posicoes(item, b.m, b.k).every((p) => b.bits[p >> 3] & (0x80 >> (p & 7))) ? 1 : 0; }
+}
+function memUsage(x) {
+  if (x.type === "hll") return x.val.dense() ? 14360 : 64 + x.val.nonzero() * 3;
+  if (x.type === "MBbloom--") return x.val.bits.length + 200;
+  if (x.type === "CMSk-TYPE") return x.val.w * x.val.d * 4 + 100;
+  if (x.type === "string") return (x.val.length || 8) + 60;
+  if (x.type === "hash") return 70 + [...x.val].reduce((s, [f, v]) => s + f.length + v.length + 8, 0);
+  if (x.type === "set") return 70 + [...x.val].reduce((s, v) => s + v.length + 40, 0);
+  return 64;
+}
+const posicoes = (item, m, k) => { const [h1, h2] = doisHashes(item); return Array.from({ length: k }, (_, i) => (h1 + i * h2) % m); };
+const colunas = (item, w, d) => { const [h1, h2] = doisHashes(item); return Array.from({ length: d }, (_, i) => (h1 + i * h2) % w); };
+
+/* HyperLogLog com 16.384 registradores (p = 14), como no Redis */
+class HLL {
+  constructor() { this.r = new Uint8Array(16384); }
+  add(item) {
+    const d = sha256(item); const idx = ((d[0] << 8) | d[1]) & 0x3fff;
+    let rho = 1; for (let i = 2; i < 8; i++) { if (d[i] === 0) { rho += 8; continue; } rho += Math.clz32(d[i]) - 24; break; }
+    if (rho > this.r[idx]) { this.r[idx] = rho; return 1; } return 0;
+  }
+  merge(o) { for (let i = 0; i < 16384; i++) if (o.r[i] > this.r[i]) this.r[i] = o.r[i]; }
+  nonzero() { let n = 0; for (const v of this.r) if (v) n++; return n; }
+  dense() { return this.nonzero() > 3000; }
+  count() {
+    const m = 16384; let sum = 0, zeros = 0;
+    for (const v of this.r) { sum += 2 ** -v; if (!v) zeros++; }
+    let E = (0.7213 / (1 + 1.079 / m)) * m * m / sum;
+    if (E <= 2.5 * m && zeros) E = m * Math.log(m / zeros);
+    return Math.round(E);
+  }
+}
+
+const R = new MiniRedis();
+function fmtRes(r, ind = "") {
+  if (r === null || r === undefined) return "(nil)";
+  if (typeof r === "number") return `(integer) ${r}`;
+  if (r === "OK" || r === "QUEUED") return r;
+  if (Array.isArray(r)) { if (!r.length) return "(empty array)"; return r.map((x, i) => `${ind}${i + 1}) ${fmtRes(x, ind + "   ")}`).join("\n"); }
+  return `"${r}"`;
+}
+const argStr = (a) => a.map((x) => (/[\s"]/.test(String(x)) || x === "" ? `"${String(x).replace(/"/g, '\\"')}"` : String(x))).join(" ");
+function rcmd(term, args, { quiet = false, queued = false } = {}) {
+  let res, err = null;
+  try { res = R.exec(args); } catch (e) { err = e.message; }
+  if (!quiet) termWrite(term, `<span class="cmd">${esc(argStr(args))}</span>\n<span class="${err ? "err" : "res"}">${esc(err ? "(error) " + err : queued ? "QUEUED" : fmtRes(res))}</span>`);
+  if (err && !quiet) return { err };
+  return queued ? { res, queuedRes: res } : res;
+}
+/* MULTI … EXEC mostrado como no redis-cli */
+function rmulti(term, cmds) {
+  termWrite(term, `<span class="cmd">MULTI</span>\n<span class="res">OK</span>`);
+  const out = cmds.map((c) => rcmd(term, c, { queued: true }).queuedRes);
+  termWrite(term, `<span class="cmd">EXEC</span>\n<span class="res">${esc(fmtRes(out))}</span>`);
+  return out;
+}
+const cmt = (term, t, cls = "cmt") => termWrite(term, `<span class="${cls}">${esc(t)}</span>`);
+
+/* ===================================================================
+   (a) CACHE DE LOGIN — espelho de redis/src/cache_login.js
+   =================================================================== */
+const TTL_USUARIO = 600, TTL_SESSAO = 3600, TTL_BLOQUEIO = 900, MAX_TENTATIVAS = 5;
+const k = {
+  usuario: (e) => `consentio:usuario:email:${e}`,
+  sessao: (t) => `consentio:sessao:${t}`,
+  sessoes: (id) => `consentio:usuario:${id}:sessoes`,
+  falhas: (e) => `consentio:login:falhas:${e}`,
+};
+let token = null, dbConsultas = 0;
+const PERMISSOES = {
+  administrador: ["pacientes:ler", "pacientes:editar", "documentos:gerar", "agenda:editar", "plano:gerenciar"],
+  dentista: ["pacientes:ler", "pacientes:editar", "documentos:gerar", "agenda:editar"],
+  secretaria: ["pacientes:ler", "agenda:editar"],
+};
+async function login(email, senha) {
+  const T = "termLogin", t0 = performance.now();
+  cmt(T, `\n### LOGIN ${email}`, "hdr");
+  cmt(T, "# 1) Está bloqueado por excesso de tentativas?");
+  const falhas = Number(rcmd(T, ["GET", k.falhas(email)])) || 0;
+  if (falhas >= MAX_TENTATIVAS) {
+    const resta = rcmd(T, ["TTL", k.falhas(email)]);
+    cmt(T, `# BLOQUEADO: faltam ${resta}s para a chave expirar`, "miss");
+    setBadge(`bloqueado ${resta}s`, "bad"); return;
+  }
+  cmt(T, "# 2) Busca o usuário no Redis (cache-aside)");
+  const flat = rcmd(T, ["HGETALL", k.usuario(email)]);
+  let usuario = null, origem;
+  if (flat.length) {
+    usuario = Object.fromEntries(flat.reduce((a, v, i) => (i % 2 ? a : [...a, [v, flat[i + 1]]]), []));
+    origem = "HIT"; cmt(T, "# CACHE HIT: não precisa ir ao MongoDB", "hit");
+  } else {
+    origem = "MISS"; cmt(T, "# CACHE MISS: db.usuarios.findOne({ email }) no MongoDB…", "miss");
+    await sleep(40); dbConsultas++;
+    const u = DB.usuarios.find((x) => x.email === email);
+    if (u) {
+      cmt(T, "# grava só o necessário (senha só como hash scrypt), com TTL de 10 min");
+      usuario = { id: u._id, nome: u.nome, email: u.email, papel: u.papel, clinica_id: u.clinica_id, ativo: String(u.ativo), senha_hash: u.senha_hash };
+      rmulti(T, [["HSET", k.usuario(email), ...Object.entries(usuario).flat()], ["EXPIRE", k.usuario(email), String(TTL_USUARIO)]]);
+    } else cmt(T, "# usuário não existe no MongoDB");
+  }
+  cmt(T, "# 3) Confere a senha (no Node: scrypt + timingSafeEqual)");
+  const ok = usuario && usuario.ativo === "true" && senha === SENHA_DEMO;
+  if (!ok) {
+    const n = rcmd(T, ["INCR", k.falhas(email)]);
+    if (n === 1) rcmd(T, ["EXPIRE", k.falhas(email), String(TTL_BLOQUEIO)]);
+    cmt(T, `# e-mail ou senha inválidos (tentativa ${n}/${MAX_TENTATIVAS})`, "miss");
+    setBadge(`${origem} · senha inválida ${n}/5`, "bad"); finishLogin(t0); return;
+  }
+  cmt(T, "# 4) Sucesso: zera falhas e cria a sessão (token aleatório de 256 bits)");
+  rcmd(T, ["DEL", k.falhas(email)]);
+  const tk = hex(crypto.getRandomValues(new Uint8Array(32)));
+  const sessao = { usuario_id: usuario.id, nome: usuario.nome, papel: usuario.papel, clinica_id: usuario.clinica_id, permissoes: (PERMISSOES[usuario.papel] || []).join(","), ip: "177.10.20.30", criada_em: new Date(R.now()).toISOString() };
+  rmulti(T, [["HSET", k.sessao(tk), ...Object.entries(sessao).flat()], ["EXPIRE", k.sessao(tk), String(TTL_SESSAO)], ["SADD", k.sessoes(usuario.id), tk], ["EXPIRE", k.sessoes(usuario.id), String(TTL_SESSAO)]]);
+  token = tk;
+  setBadge(`CACHE ${origem}`, origem === "HIT" ? "ok" : "warn");
+  finishLogin(t0);
+  toast(`Login ok (${origem === "HIT" ? "cache HIT: sem MongoDB" : "cache MISS: foi ao MongoDB"})`);
+}
+function finishLogin(t0) { $("#sLat").textContent = (performance.now() - t0).toFixed(1) + " ms"; $("#sDb").textContent = dbConsultas; refreshKeys(); refreshSession(); }
+function requisicao() {
+  const T = "termLogin";
+  cmt(T, "\n### REQUISIÇÃO (valida a sessão a cada página)", "hdr");
+  if (!token) { cmt(T, "# nenhum token no navegador: faça login"); return; }
+  const t0 = performance.now();
+  const flat = rcmd(T, ["HGETALL", k.sessao(token)]);
+  if (!flat.length) { cmt(T, "# sessão expirou ou fez logout → redireciona para o login", "miss"); token = null; setBadge("sessão expirada", "bad"); }
+  else { rcmd(T, ["EXPIRE", k.sessao(token), String(TTL_SESSAO)]); cmt(T, "# sessão válida, TTL renovado (expiração deslizante). MongoDB não foi consultado.", "hit"); }
+  $("#sReq").textContent = (performance.now() - t0).toFixed(2) + " ms";
+  refreshKeys(); refreshSession();
+}
+function logout() {
+  const T = "termLogin";
+  cmt(T, "\n### LOGOUT", "hdr");
+  if (!token) { cmt(T, "# não há sessão"); return; }
+  const flat = rcmd(T, ["HGETALL", k.sessao(token)]);
+  const uid = flat[flat.indexOf("usuario_id") + 1];
+  rcmd(T, ["DEL", k.sessao(token)]);
+  if (uid) rcmd(T, ["SREM", k.sessoes(uid), token]);
+  token = null; setBadge("logout", "neutral"); refreshKeys(); refreshSession();
+}
+function invalidar() {
+  const T = "termLogin", email = $("#lEmail").value, u = DB.usuarios.find((x) => x.email === email);
+  cmt(T, `\n### TROCA DE SENHA de ${email} no MongoDB → invalida cache e TODAS as sessões`, "hdr");
+  if (!u) { cmt(T, "# usuário inexistente"); return; }
+  const tokens = rcmd(T, ["SMEMBERS", k.sessoes(u._id)]);
+  rmulti(T, [["DEL", k.usuario(email)], ["DEL", k.sessoes(u._id)], ...tokens.map((t) => ["DEL", k.sessao(t)])]);
+  if (tokens.includes(token)) token = null;
+  setBadge(`${tokens.length} sessão(ões) derrubada(s)`, "warn"); refreshKeys(); refreshSession();
+}
+function setBadge(t, cls) { const b = $("#loginBadge"); b.textContent = t; b.className = "tag " + (cls === "neutral" ? "neutral" : cls); }
+function refreshKeys() {
+  const ks = R.keys("consentio:").filter((x) => !x.startsWith("consentio:stats:"));
+  $("#keysLogin").innerHTML = ks.length ? ks.map((kk) => { const x = R.e(kk), t = R.ttl(kk); return `<button class="key" type="button" data-key="${esc(kk)}" style="cursor:pointer;text-align:left;color:inherit"><span class="ty">${x.type}</span><span class="nm" title="${esc(kk)}">${esc(kk.length > 60 ? kk.slice(0, 44) + "…" + kk.slice(-8) : kk)}</span><span class="ttl ${t >= 0 && t < 120 ? "low" : ""}">${t >= 0 ? fmtTTL(t) : "sem TTL"}</span></button>`; }).join("") : `<div class="empty">Nenhuma chave de login. Clique em <b>Entrar</b>.</div>`;
+  const off = R.offset / 1000; $("#clockInfo").textContent = off ? `(adiantado ${fmtTTL(off)})` : "";
+}
+const fmtTTL = (s) => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60; return (h ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(ss).padStart(2, "0"); };
+function sessaoAtual() {
+  if (!token) return null; const flat = R.e(k.sessao(token)); if (!flat) return null;
+  return { ...Object.fromEntries(flat.val), ttl: R.ttl(k.sessao(token)) };
+}
+function refreshSession() {
+  const s = sessaoAtual(), pill = $("#sessionPill");
+  pill.classList.toggle("on", !!s);
+  $("#sessionPillText").textContent = s ? `Sessão: ${s.nome} · TTL ${fmtTTL(s.ttl)}` : "Redis: sem sessão";
+  $("#dashSession").innerHTML = s ? `
+    <div class="row" style="gap:12px"><div class="avatar">${esc(s.nome.replace(/^(Dra?\.)\s*/, "").slice(0, 1))}</div><div><b>${esc(s.nome)}</b><div class="small muted">${esc(s.papel)} · ${esc(byId("clinicas", s.clinica_id)?.nome || "")}</div></div></div>
+    <div class="mini-list" style="margin-top:12px">
+      <div class="mini-item"><span class="muted">Chave</span><code>consentio:sessao:${esc(token.slice(0, 10))}…</code></div>
+      <div class="mini-item"><span class="muted">TTL (renova a cada uso)</span><b class="mono">${fmtTTL(s.ttl)}</b></div>
+      <div class="mini-item"><span class="muted">Permissões</span><span class="small">${esc(s.permissoes.split(",").join(" · "))}</span></div>
+    </div>
+    <div class="row" style="margin-top:12px"><button class="btn sm" type="button" data-quick="login">Abrir monitor</button><button class="btn sm ghost" type="button" id="dashLogout">Logout</button></div>`
+    : `<div class="empty">Nenhuma sessão no Redis.<br><button class="btn primary sm" style="margin-top:10px" type="button" id="dashLogin">Simular login da Dra. Mayra</button></div>`;
+}
+
+/* ===================================================================
+   (b) BLOOM FILTER — espelho de BloomFilter em redis/src/probabilisticas.js
+   =================================================================== */
+let MODE = "nativo";
+const BF = { emails: "consentio:stats:bf:emails", cpfs: "consentio:stats:bf:cpfs:65b000000000000000000001" };
+const BF_M = 95851, BF_K = 7, bfCount = { emails: 0, cpfs: 0 };
+function bfEnsure(which, T = "termBloom") {
+  const key = BF[which];
+  if (R.e(key)) return;
+  if (MODE === "nativo") { cmt(T, "# cria o filtro: 1% de erro para 10.000 itens"); rcmd(T, ["BF.RESERVE", key, "0.01", "10000"]); }
+  else { cmt(T, "# sem módulo: o bitmap nasce sozinho no 1º SETBIT"); R.set(key, "string", new Uint8Array(Math.ceil(BF_M / 8))); }
+}
+function bfAddItem(which, item, { quiet = false } = {}) {
+  const key = BF[which], T = "termBloom"; bfEnsure(which);
+  if (MODE === "nativo") {
+    const r = quiet ? R.bfAdd(key, item) : rcmd(T, ["BF.ADD", key, item]);
+    if (r) bfCount[which]++; return r;
+  }
+  let novo = 0;
+  posicoes(item, BF_M, BF_K).forEach((p) => { const old = quiet ? R.exec(["SETBIT", key, String(p), "1"]) : rcmd(T, ["SETBIT", key, String(p), "1"]); if (!old) novo = 1; });
+  if (novo) bfCount[which]++; return novo;
+}
+function bfHasItem(which, item, quiet = false) {
+  const key = BF[which], T = "termBloom";
+  if (!R.e(key)) bfEnsure(which);
+  if (MODE === "nativo") return quiet ? R.bfHas(key, item) : rcmd(T, ["BF.EXISTS", key, item]);
+  const bits = posicoes(item, BF_M, BF_K).map((p) => (quiet ? R.exec(["GETBIT", key, String(p)]) : rcmd(T, ["GETBIT", key, String(p)])));
+  return bits.every((b) => b === 1) ? 1 : 0;
+}
+function bfBitsOf(which, item) {
+  const key = BF[which], x = R.e(key); const bits = x ? (x.type === "string" ? x.val : x.val.bits) : new Uint8Array(0);
+  return posicoes(item, BF_M, BF_K).map((p) => ({ p, on: !!(bits[p >> 3] & (0x80 >> (p & 7))) }));
+}
+function bfStats() {
+  const w = $("#bfKey").value, x = R.e(BF[w]); let on = 0;
+  if (x) { const bits = x.type === "string" ? x.val : x.val.bits; for (const b of bits) { let v = b; while (v) { on += v & 1; v >>= 1; } } }
+  $("#bfN").textContent = fmtN(bfCount[w]); $("#bfFill").textContent = ((on / BF_M) * 100).toFixed(1).replace(".", ",") + "%";
+  $("#bfP").textContent = fmtP((1 - Math.exp((-BF_K * bfCount[w]) / BF_M)) ** BF_K * 100);
+}
+function existeNoMongo(which, item) {
+  return which === "emails" ? DB.usuarios.some((u) => u.email === item) : DB.pacientes.some((p) => p.cpf === item && p.clinica_id === "65b000000000000000000001");
+}
+function bfCheckUI() {
+  const w = $("#bfKey").value, item = $("#bfItem").value.trim(), T = "termBloom";
+  if (!item) { toast("Digite um e-mail ou CPF"); return; }
+  cmt(T, `\n### VERIFICAR "${item}"`, "hdr");
+  const r = bfHasItem(w, item);
+  const bits = bfBitsOf(w, item);
+  $("#bfBits").innerHTML = bits.map((b) => `<div class="bit ${b.on ? "on" : "off"}"><b>${b.on ? 1 : 0}</b>${b.p}</div>`).join("");
+  let html;
+  if (!r) { html = `<div class="verdict no">Com certeza NÃO existe: pelo menos um bit está em 0. O cadastro segue <u>sem consultar o MongoDB</u>.</div>`; cmt(T, "# 0 = com certeza não existe → libera sem ir ao banco", "hit"); }
+  else {
+    const real = existeNoMongo(w, item);
+    const q = w === "emails" ? `db.usuarios.findOne({ email: "${item}" })` : `db.pacientes.findOne({ clinica_id: ObjectId("65b000000000000000000001"), cpf: "${item}" })`;
+    cmt(T, `# 1 = TALVEZ exista → confirma no MongoDB: ${q}`, "miss");
+    cmt(T, real ? "# MongoDB: existe de verdade → bloqueia o cadastro duplicado" : "# MongoDB: NÃO existe → era um FALSO POSITIVO (por isso sempre se confirma)", real ? "cmt" : "miss");
+    html = `<div class="verdict maybe">TALVEZ exista: todos os 7 bits estão em 1. Confirmação no MongoDB: <b>${real ? "existe de verdade" : "não existe (falso positivo!)"}</b>.</div>`;
+  }
+  $("#bfVerdict").innerHTML = html; bfStats();
+}
+function bfAddUI() {
+  const w = $("#bfKey").value, item = $("#bfItem").value.trim(); if (!item) return;
+  cmt("termBloom", `\n### ADICIONAR "${item}"`, "hdr");
+  if (MODE === "manual") cmt("termBloom", `# liga os k = 7 bits apontados pelos hashes`);
+  const r = bfAddItem(w, item);
+  cmt("termBloom", r ? "# item novo: algum bit mudou de 0 para 1" : "# nenhum bit mudou: o item (ou colisões) já estava lá");
+  bfStats(); bfCheckBitsOnly();
+}
+function bfCheckBitsOnly() { const w = $("#bfKey").value, item = $("#bfItem").value.trim(); if (!item) return; $("#bfBits").innerHTML = bfBitsOf(w, item).map((b) => `<div class="bit ${b.on ? "on" : "off"}"><b>${b.on ? 1 : 0}</b>${b.p}</div>`).join(""); }
+function bfBulkUI() {
+  const T = "termBloom";
+  cmt(T, "\n### +10.000 e-mails simulados (mesmo gerador de redis/demo_estatisticas.js)", "hdr");
+  bfEnsure("emails");
+  const itens = []; for (let i = 0; i < 9996; i++) itens.push(`usuario${i}@clinica${i % 800}.com.br`);
+  itens.forEach((e) => bfAddItem("emails", e, { quiet: true }));
+  termWrite(T, MODE === "nativo"
+    ? `<span class="cmd">BF.MADD ${BF.emails} usuario0@clinica0.com.br usuario1@clinica1.com.br … (9.996 itens, em lotes de 1.000)</span>\n<span class="res">1) (integer) 1\n2) (integer) 1\n…</span>`
+    : `<span class="cmd">SETBIT ${BF.emails} &lt;posição&gt; 1   (7 × 9.996 = 69.972 comandos em pipeline)</span>\n<span class="res">…</span>`);
+  $("#bfKey").value = "emails"; bfStats(); toast("10.000 e-mails no filtro");
+}
+function bfFpUI() {
+  const T = "termBloom";
+  if (bfCount.emails < 5000) bfBulkUI();
+  cmt(T, "\n### TESTE: 10.000 e-mails que NUNCA foram inseridos", "hdr");
+  let fp = 0; for (let i = 0; i < 10000; i++) if (bfHasItem("emails", `novo${i}@outraclinica.com.br`, true)) fp++;
+  let fn = 0; for (let i = 0; i < 9996; i++) if (!bfHasItem("emails", `usuario${i}@clinica${i % 800}.com.br`, true)) fn++;
+  termWrite(T, `<span class="cmd">BF.MEXISTS ${BF.emails} novo0@outraclinica.com.br … novo9999@outraclinica.com.br</span>`);
+  cmt(T, `# falsos positivos: ${fp} de 10.000 = ${fmtP(fp / 100)} (esperado ≈ 1%)`, "hit");
+  cmt(T, `# falsos negativos entre os cadastrados: ${fn} (garantido: sempre 0)`, "hit");
+  cmt(T, `# → ${fmtN(10000 - fp)} cadastros liberados SEM consultar o MongoDB`);
+  $("#bfVerdict").innerHTML = `<div class="verdict info">Falsos positivos: <b>${fp}</b> em 10.000 (${fmtP(fp / 100)}) · Falsos negativos: <b>${fn}</b> · ${fmtN(10000 - fp)} consultas ao MongoDB evitadas.</div>`;
+  $("#bfKey").value = "emails"; bfStats();
+}
+
+/* ===================================================================
+   (c) HYPERLOGLOG
+   =================================================================== */
+const DIAS = ["2026-11-20", "2026-11-21", "2026-11-22", "2026-11-23", "2026-11-24", "2026-11-25", "2026-11-26"];
+const exatoDia = Object.fromEntries(DIAS.map((d) => [d, new Set()]));
+let semente = 42;
+const aleatorio = () => ((semente = (semente * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+const hllKey = (d) => `consentio:stats:hll:ativos:${d}`;
+function hllAddUI() {
+  const d = $("#hDia").value, u = $("#hUser").value.trim() || "u1", T = "termHll";
+  cmt(T, `\n### ${u} acessou o sistema em ${d}`, "hdr");
+  const r = rcmd(T, ["PFADD", hllKey(d), u]); exatoDia[d].add(u);
+  cmt(T, r ? "# 1 = a estimativa mudou (usuário novo no dia)" : "# 0 = nada mudou (mesmo usuário de novo NÃO conta 2 vezes)");
+  rcmd(T, ["PFCOUNT", hllKey(d)]); renderHll();
+}
+function hllSimUI() {
+  const d = $("#hDia").value, T = "termHll";
+  const itens = []; for (let i = 0; i < 3000; i++) itens.push(`u${Math.floor(aleatorio() * 6000)}`);
+  itens.forEach((u) => exatoDia[d].add(u)); R.exec(["PFADD", hllKey(d), ...itens]);
+  cmt(T, `\n### 3.000 acessos em ${d} (base de 6.000 usuários; muitos repetem)`, "hdr");
+  termWrite(T, `<span class="cmd">PFADD ${hllKey(d)} ${esc(itens.slice(0, 4).join(" "))} … (3.000 itens)</span>\n<span class="res">(integer) 1</span>`);
+  const est = rcmd(T, ["PFCOUNT", hllKey(d)]);
+  cmt(T, `# exato: ${exatoDia[d].size} · erro ${fmtP(((est - exatoDia[d].size) / exatoDia[d].size) * 100)}`);
+  renderHll();
+}
+function hllMergeUI() {
+  const T = "termHll";
+  cmt(T, "\n### Usuários únicos na SEMANA: une os 7 dias sem contar a mesma pessoa duas vezes", "hdr");
+  rcmd(T, ["PFMERGE", "consentio:stats:hll:ativos:semana-48", ...DIAS.map(hllKey)]);
+  rcmd(T, ["PFCOUNT", "consentio:stats:hll:ativos:semana-48"]);
+  rcmd(T, ["MEMORY", "USAGE", "consentio:stats:hll:ativos:semana-48"]);
+  renderHll();
+}
+function renderHll() {
+  const semana = new Set(); DIAS.forEach((d) => exatoDia[d].forEach((u) => semana.add(u)));
+  const rows = DIAS.map((d) => { const est = R.e(hllKey(d)) ? R.exec(["PFCOUNT", hllKey(d)]) : 0, ex = exatoDia[d].size; return [fmtD(d + "T12:00:00Z"), est, ex]; });
+  const sk = "consentio:stats:hll:ativos:semana-48", sEst = R.e(sk) ? R.exec(["PFCOUNT", sk]) : null;
+  const err = (e, x) => (x ? fmtP(((e - x) / x) * 100) : "—");
+  $("#hTable").innerHTML = `<thead><tr><th>Dia</th><th class="num">PFCOUNT</th><th class="num">exato</th><th class="num">erro</th></tr></thead><tbody>` +
+    rows.map(([d, e, x]) => `<tr><td>${d}</td><td class="num">${fmtN(e)}</td><td class="num">${fmtN(x)}</td><td class="num">${err(e, x)}</td></tr>`).join("") +
+    `<tr><td><b>Semana (PFMERGE)</b></td><td class="num"><b>${sEst === null ? "—" : fmtN(sEst)}</b></td><td class="num">${fmtN(semana.size)}</td><td class="num">${sEst === null ? "—" : err(sEst, semana.size)}</td></tr></tbody>`;
+}
+function hllBigUI() {
+  const T = "termHll", key = "consentio:stats:hll:pacientes:65b000000000000000000001";
+  cmt(T, "\n### 100.000 pacientes únicos visualizados na clínica 1", "hdr");
+  R.exec(["DEL", key]); const h = new HLL(); for (let i = 0; i < 100000; i++) h.add(`paciente:${i}`); R.m.set(key, { type: "hll", val: h, exp: null });
+  termWrite(T, `<span class="cmd">PFADD ${key} paciente:0 paciente:1 … paciente:99999</span>\n<span class="res">(integer) 1</span>`);
+  const est = rcmd(T, ["PFCOUNT", key]); const mem = rcmd(T, ["MEMORY", "USAGE", key]);
+  const setBytes = 5572608; // medido no Redis real: SET com 100 mil membros = 5.442 KB (redis/demo_estatisticas.js)
+  cmt(T, `# erro: ${fmtP(((est - 100000) / 100000) * 100)} · HLL ≈ ${(mem / 1024).toFixed(0)} KB · SET exato = 5.442 KB (≈ ${Math.round(setBytes / mem)}× mais)`);
+  $("#hMem").innerHTML = [["HyperLogLog", mem, "redis", `${(mem / 1024).toFixed(0)} KB · ${fmtN(est)} (erro ${fmtP((est - 100000) / 1000)})`], ["SET exato", setBytes, "warn", "5.442 KB · 100.000"]]
+    .map(([n, b, c, l]) => `<div class="bar-row" style="grid-template-columns:110px 1fr"><span>${n}</span><div><div class="track"><div class="fill ${c}" style="width:${Math.max(1, (b / setBytes) * 100)}%"></div></div><div class="small dim" style="margin-top:3px">${l}</div></div></div>`).join("");
+}
+
+/* ===================================================================
+   (d) COUNT-MIN SKETCH — espelho de CountMinSketch em probabilisticas.js
+   =================================================================== */
+const ACOES = { agenda_consultada: 40, ficha_aberta: 25, documento_gerado: 15, odontograma_aberto: 10, mapa_facial_aberto: 5, login: 5 };
+const HORAS_SIM = [8, 9, 10, 10, 11, 11, 11, 13, 14, 14, 15, 15, 15, 16, 17, 18];
+const CMS_KEY = "consentio:stats:cms:eventos:2026-11-26";
+let cmsW = 2000, cmsD = 5; const cmsExato = {};
+function cmsEnsure(T = "termCms") {
+  if (R.e(CMS_KEY)) return;
+  if (MODE === "nativo") { cmt(T, `# cria a matriz ${cmsD} linhas × ${cmsW} colunas`); rcmd(T, ["CMS.INITBYDIM", CMS_KEY, String(cmsW), String(cmsD)]); }
+  else { cmt(T, "# sem módulo: matriz guardada num HASH com campos \"linha:coluna\" (nasce no 1º HINCRBY)"); }
+}
+function cmsIncr(pares, { quiet = false } = {}) {
+  const T = "termCms"; cmsEnsure();
+  pares.forEach(([it, q]) => { cmsExato[it] = (cmsExato[it] || 0) + q; });
+  if (MODE === "nativo") { const args = ["CMS.INCRBY", CMS_KEY, ...pares.flatMap(([i, q]) => [i, String(q)])]; return quiet ? R.exec(args) : rcmd(T, args); }
+  pares.forEach(([it, q]) => colunas(it, cmsW, cmsD).forEach((c, r) => { const a = ["HINCRBY", CMS_KEY, `${r}:${c}`, String(q)]; quiet ? R.exec(a) : rcmd(T, a); }));
+}
+function cmsQuery(itens, quiet = true) {
+  const T = "termCms";
+  if (MODE === "nativo") { if (!R.e(CMS_KEY)) return itens.map(() => 0); const a = ["CMS.QUERY", CMS_KEY, ...itens]; return quiet ? R.exec(a) : rcmd(T, a); }
+  return itens.map((it) => { const campos = colunas(it, cmsW, cmsD).map((c, r) => `${r}:${c}`); const v = quiet ? R.exec(["HMGET", CMS_KEY, ...campos]) : rcmd(T, ["HMGET", CMS_KEY, ...campos]); return Math.min(...v.map((x) => Number(x) || 0)); });
+}
+function cmsEventUI(acao) {
+  const h = $("#cHora").value, T = "termCms";
+  cmt(T, `\n### evento: ${acao} às ${h}h`, "hdr");
+  cmsIncr([[acao, 1], [`${acao}@${h}h`, 1]]);
+  cmt(T, "# consulta a estimativa (menor contador entre as linhas):");
+  cmsQuery([acao], false); renderCms();
+}
+function cmsSimUI() {
+  const T = "termCms"; cmt(T, "\n### 50.000 eventos simulados (mesmos pesos de redis/demo_estatisticas.js)", "hdr");
+  const sorteio = Object.entries(ACOES).flatMap(([a, p]) => Array(p).fill(a)); let lote = {};
+  const flush = () => { cmsIncr(Object.entries(lote), { quiet: true }); lote = {}; };
+  for (let i = 0; i < 50000; i++) {
+    const a = sorteio[Math.floor(aleatorio() * sorteio.length)], h = HORAS_SIM[Math.floor(aleatorio() * 16)];
+    for (const it of [a, `${a}@${h}h`]) lote[it] = (lote[it] || 0) + 1;
+    if (i % 2000 === 1999) flush();
+  }
+  flush();
+  termWrite(T, MODE === "nativo" ? `<span class="cmd">CMS.INCRBY ${CMS_KEY} agenda_consultada 812 agenda_consultada@11h 160 … (25 lotes de 2.000 eventos)</span>\n<span class="res">…</span>` : `<span class="cmd">HINCRBY ${CMS_KEY} "0:1234" 812   (d comandos por item, em pipeline)</span>\n<span class="res">…</span>`);
+  cmsQuery(Object.keys(ACOES), false); renderCms();
+}
+function renderCms() {
+  const acoes = Object.keys(ACOES), est = cmsQuery(acoes);
+  const rows = acoes.map((a, i) => [a, est[i], cmsExato[a] || 0]).sort((x, y) => y[1] - x[1]);
+  $("#cTable").innerHTML = `<thead><tr><th>Ação</th><th class="num">estimado</th><th class="num">exato</th><th class="num">diferença</th></tr></thead><tbody>` +
+    rows.map(([a, e, x]) => `<tr><td><code>${a}</code></td><td class="num">${fmtN(e)}</td><td class="num">${fmtN(x)}</td><td class="num" style="color:${e - x ? "var(--warn)" : "var(--ok)"}">+${fmtN(e - x)}</td></tr>`).join("") + "</tbody>";
+  const horas = Array.from({ length: 13 }, (_, i) => i + 7), porH = cmsQuery(horas.map((h) => `documento_gerado@${h}h`)), max = Math.max(1, ...porH), pico = porH.indexOf(Math.max(...porH));
+  $("#cHoras").innerHTML = horas.map((h, i) => `<div class="hb ${porH[i] && i === pico ? "peak" : ""}" title="${h}h: ${porH[i]}"><i style="height:${(porH[i] / max) * 92}px"></i><span>${h}h</span></div>`).join("");
+}
+function cmsReset() { R.exec(["DEL", CMS_KEY]); Object.keys(cmsExato).forEach((k2) => delete cmsExato[k2]); }
+
+/* ===================================================================
+   TELAS
+   =================================================================== */
+const TITULOS = { dashboard: "Visão geral", pacientes: "Pacientes & ficha de anamnese", documentos: "Documentos & compliance", redis: "Monitor Redis & estruturas probabilísticas" };
+function go(tab, sub) {
+  $$("section[data-tab]").forEach((s) => s.classList.toggle("active", s.dataset.tab === tab));
+  $$(".nav button").forEach((b) => { if (b.dataset.go === tab) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
+  $("#pageTitle").textContent = TITULOS[tab];
+  if (sub) subGo(sub);
+  try { history.replaceState(null, "", "#" + tab + (sub ? "/" + sub : "")); } catch (e) {}
+  render(tab);
+  window.scrollTo({ top: 0 });
+}
+function subGo(sub) {
+  $$(".subtabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.sub === sub)));
+  $$(".subpanel").forEach((p) => p.classList.toggle("active", p.dataset.subpanel === sub));
+  if (sub === "bloom") bfStats(); if (sub === "hll") renderHll(); if (sub === "cms") renderCms();
+}
+function render(tab) {
+  if (tab === "dashboard") renderDashboard();
+  if (tab === "pacientes") renderPacientes();
+  if (tab === "documentos") renderDocumentos();
+  if (tab === "redis") { refreshKeys(); bfStats(); renderHll(); renderCms(); }
+}
+
+/* ---------- Tela 1 ---------- */
+const ICON = {
+  users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-7 7-7s7 3 7 7"/></svg>',
+  file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>',
+};
+const STATUS_TAG = { assinado: "ok", enviado: "info", gerado: "warn", cancelado: "bad", agendado: "info", confirmado: "ok", realizado: "neutral", faltou: "bad" };
+function todosDocs() { return DB.pacientes.flatMap((p) => (p.documentos || []).map((d) => ({ ...d, paciente: p }))); }
+function todosAgs() { return DB.pacientes.flatMap((p) => (p.agendamentos || []).map((a) => ({ ...a, paciente: p }))); }
+function renderDashboard() {
+  const docs = todosDocs(), pend = docs.filter((d) => d.status === "gerado" || d.status === "enviado").length;
+  const ags = todosAgs().filter((a) => a.status === "agendado" || a.status === "confirmado");
+  const alergicos = DB.pacientes.filter((p) => (get(p, "ficha.anamnese.alergias") || []).length).length;
+  const kpis = [
+    ["Pacientes", DB.pacientes.length, `${alergicos} com alergia registrada`, ICON.users],
+    ["Termos emitidos", docs.length, "dentro de pacientes.documentos[]", ICON.file],
+    ["Pendentes de assinatura", pend, "status gerado ou enviado", ICON.clock],
+    ["Consultas a realizar", ags.length, "agendadas ou confirmadas", ICON.cal],
+  ];
+  $("#kpis").innerHTML = kpis.map(([l, v, s, i]) => `<div class="card kpi"><span class="lbl"><span class="ico">${i}</span>${l}</span><span class="val">${v}</span><span class="sub">${s}</span></div>`).join("");
+  const ordem = ags.sort((a, b) => a.inicio.localeCompare(b.inicio));
+  $("#dashAgenda").innerHTML = ordem.length ? `<div class="mini-list">${ordem.map((a) => `<div class="mini-item"><span><b>${fmtDT(a.inicio)}</b> · ${esc(a.paciente.nome)}<br><span class="small muted">${esc(byId("procedimentos", a.procedimento_id)?.nome || "Consulta")} · ${esc(byId("usuarios", a.profissional_id)?.nome || "")}</span></span><span class="tag ${STATUS_TAG[a.status]}">${a.status}</span></div>`).join("")}</div>` : `<div class="empty">Sem consultas.</div>`;
+  const st = {}; docs.forEach((d) => (st[d.status] = (st[d.status] || 0) + 1));
+  const maxS = Math.max(1, ...Object.values(st));
+  $("#dashStatus").innerHTML = Object.entries(st).sort((a, b) => b[1] - a[1]).map(([s, n]) => `<div class="bar-row"><span><span class="tag ${STATUS_TAG[s]}">${s}</span></span><div class="track"><div class="fill" style="width:${(n / maxS) * 100}%"></div></div><b class="num">${n}</b></div>`).join("") || `<div class="empty">Nenhum termo.</div>`;
+  barsAlergias("#dashAlergias");
+  refreshSession();
+}
+function barsAlergias(sel) {
+  const { result } = runPipeline("a21"); const max = Math.max(1, ...result.map((r) => r.total_pacientes));
+  $(sel).innerHTML = result.length ? result.map((r) => `<div class="bar-row"><span>${esc(r.alergia)}</span><div class="track"><div class="fill warn" style="width:${(r.total_pacientes / max) * 100}%"></div></div><b class="num">${r.total_pacientes}</b></div>`).join("") : `<div class="empty">Nenhuma alergia registrada.</div>`;
+  return result;
+}
+
+/* ---------- Tela 2 ---------- */
+let selPac = "65d000000000000000000001";
+function renderPacientes() {
+  const q = $("#busca").value.trim().toLowerCase();
+  const lista = DB.pacientes.filter((p) => !q || p.nome.toLowerCase().split(/\s+/).some((w) => w.startsWith(q)) || p.nome.toLowerCase().includes(q));
+  $("#plist").innerHTML = lista.length ? lista.map((p) => {
+    const al = get(p, "ficha.anamnese.alergias") || [];
+    return `<button class="pitem" role="option" type="button" aria-selected="${p._id === selPac}" data-pac="${p._id}">
+      <div class="row" style="gap:10px;flex-wrap:nowrap"><div class="avatar">${esc(p.nome[0])}</div><div style="min-width:0"><div class="nm">${esc(p.nome)}</div><div class="small muted">${idade(p.data_nascimento)} anos · ${esc(byId("clinicas", p.clinica_id)?.nome || "")}</div></div></div>
+      <div class="row" style="gap:6px">${al.map((a) => `<span class="chip">⚠ ${esc(a)}</span>`).join("") || '<span class="small dim">sem alergias</span>'}
+        <span class="tag neutral">${(p.documentos || []).length} termo(s)</span><span class="tag neutral">${(p.agendamentos || []).length} consulta(s)</span></div>
+    </button>`;
+  }).join("") : `<div class="empty">Nenhum paciente encontrado para "${esc(q)}".</div>`;
+  renderDetalhe();
+}
+function renderDetalhe() {
+  const p = byId("pacientes", selPac);
+  if (!p) { $("#detalhe").innerHTML = `<div class="empty">Selecione um paciente.</div>`; return; }
+  const an = get(p, "ficha.anamnese") || {}, al = an.alergias || [];
+  const sec = (t, itens, f) => `<div class="sec-title">${t} <span class="tag neutral">${itens.length}</span></div>${itens.length ? `<div class="mini-list">${itens.map(f).join("")}</div>` : '<div class="small dim">vazio</div>'}`;
+  $("#detalhe").innerHTML = `
+    <div class="card-h"><div class="row" style="gap:12px;flex-wrap:nowrap"><div class="avatar" style="width:46px;height:46px;font-size:18px">${esc(p.nome[0])}</div><div><h3>${esc(p.nome)}</h3><p>${p.cpf ? "CPF " + esc(p.cpf) : "CPF não informado"} · ${idade(p.data_nascimento)} anos · ${esc(get(p, "contato.telefone") || get(p, "contato.email") || "sem contato")}</p></div></div><span class="tag mongo">1 documento = prontuário inteiro</span></div>
+    ${p.responsavel_legal ? `<div class="note" style="margin-bottom:10px">Menor de idade. Responsável legal: <b>${esc(p.responsavel_legal.nome)}</b> (${esc(p.responsavel_legal.parentesco)})</div>` : ""}
+    <div class="sec-title">Ficha de anamnese · <code>ficha.anamnese.alergias</code> (array embutido)</div>
+    <div class="row" id="alergiaChips">${al.map((a) => `<span class="chip">⚠ ${esc(a)} <button type="button" aria-label="Remover ${esc(a)}" data-pull="${esc(a)}">×</button></span>`).join("") || '<span class="small dim">Nenhuma alergia registrada</span>'}</div>
+    <form class="row" id="formAlergia" style="margin-top:8px"><div class="field" style="flex:1;min-width:160px"><label class="sr" for="novaAlergia">Nova alergia</label><input id="novaAlergia" placeholder="Adicionar alergia (ex.: penicilina)"></div><button class="btn sm" type="submit">Adicionar ($addToSet)</button></form>
+    <div class="small muted" style="margin-top:8px">Medicamentos: ${esc((an.medicamentos_em_uso || []).join(", ") || "nenhum")} · Doenças: ${esc((an.doencas_preexistentes || []).join(", ") || "nenhuma")}${an.fumante ? " · fumante" : ""}${an.gestante ? " · gestante" : ""}</div>
+    <div class="grid g2" style="margin-top:4px">
+      <div>${sec("Documentos[]", p.documentos || [], (d) => `<div class="mini-item"><span>${esc(d.modelo.titulo.replace("Termo de Consentimento — ", ""))}<br><span class="small muted">${fmtDT(d.gerado_em)}</span></span><span class="tag ${STATUS_TAG[d.status]}">${d.status}</span></div>`)}</div>
+      <div>${sec("Agendamentos[]", p.agendamentos || [], (a) => `<div class="mini-item"><span>${fmtDT(a.inicio)}<br><span class="small muted">${esc(byId("procedimentos", a.procedimento_id)?.nome || "Consulta")}</span></span><span class="tag ${STATUS_TAG[a.status]}">${a.status}</span></div>`)}</div>
+      <div>${sec("Odontogramas[]", p.odontogramas || [], (o) => `<div class="mini-item"><span>${fmtD(o.data)} · ${o.dentes.length} dente(s)<br><span class="small muted">${esc(o.dentes.filter((d) => d.condicao !== "higido").map((d) => d.numero + " " + d.condicao.replace("_", " ")).join(", ") || "todos hígidos")}</span></span></div>`)}</div>
+      <div>${sec("Mapas_faciais[]", p.mapas_faciais || [], (m) => `<div class="mini-item"><span>${m.tipo} · ${fmtD(m.data)}<br><span class="small muted">${esc(m.produto.nome)} · lote ${esc(m.produto.lote)} · ${m.pontos.length} ponto(s)</span></span></div>`)}</div>
+    </div>
+    <div class="sec-title">Documento JSON no MongoDB · <code>db.pacientes.findOne({ _id: ObjectId("${p._id}") })</code></div>
+    <pre class="code">${shell(p)}</pre>`;
+}
+function validarPaciente(f) {
+  const e = {};
+  if (f.nome.length < 2) e.nome = "nome: obrigatório (mínimo 2 caracteres)";
+  if (!f.data_nascimento) e.data_nascimento = "data_nascimento: obrigatório (bsonType date)";
+  if (f.cpf && !/^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(f.cpf)) e.cpf = "cpf: formato 000.000.000-00 (pattern do $jsonSchema)";
+  if (f.email && !/^.+@.+\..+$/.test(f.email)) e.email = "email: formato inválido";
+  return e;
+}
+function salvarPaciente(ev) {
+  ev.preventDefault();
+  const cpfRaw = $("#fCpf").value.trim(), cpf = cpfRaw.replace(/\D/g, "").length === 11 ? cpfRaw.replace(/\D/g, "").replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") : cpfRaw;
+  const f = { nome: $("#fNome").value.trim(), data_nascimento: $("#fNasc").value, cpf, email: $("#fEmail").value.trim() };
+  const errs = validarPaciente(f);
+  $$("[data-err]").forEach((s) => (s.textContent = errs[s.dataset.err] || ""));
+  const list = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
+  const clinica_id = $("#fClinica").value;
+  const doc = {
+    _id: newOid(), clinica_id, nome: f.nome, ...(cpf ? { cpf } : {}),
+    data_nascimento: f.data_nascimento ? f.data_nascimento + "T00:00:00Z" : undefined, sexo: $("#fSexo").value,
+    contato: { ...($("#fTel").value.trim() ? { telefone: $("#fTel").value.trim() } : {}), ...(f.email ? { email: f.email } : {}) },
+    ficha: { anamnese: { alergias: list($("#fAlergias").value), medicamentos_em_uso: list($("#fMed").value), doencas_preexistentes: [], gestante: $("#fGestante").checked, fumante: $("#fFumante").checked } },
+    documentos: [], agendamentos: [], odontogramas: [], mapas_faciais: [], criado_em: new Date().toISOString(),
+  };
+  const cmd = `db.pacientes.insertOne(${plain(doc)})`;
+  if (Object.keys(errs).length) {
+    mongoLog("mongoP", cmd, `MongoServerError: Document failed validation\n  ${Object.values(errs).join("\n  ")}`, "insertOne recusado pelo $jsonSchema (scripts/01_criar_estrutura.js)");
+    toast("Validação recusou o documento"); return;
+  }
+  if (cpf && clinica_id === "65b000000000000000000001") {
+    const talvez = bfHasItem("cpfs", cpf, true);
+    mongoLog("mongoP", `// Redis antes do MongoDB: BF.EXISTS ${BF.cpfs} ${cpf}  →  ${talvez}`, undefined, talvez ? "Bloom: CPF TALVEZ exista → o índice único do MongoDB decide" : "Bloom: CPF com certeza é novo");
+  }
+  if (cpf && DB.pacientes.some((p) => p.cpf === cpf && p.clinica_id === clinica_id)) {
+    mongoLog("mongoP", cmd, `MongoServerError: E11000 duplicate key error collection: consentio.pacientes index: clinica_id_1_cpf_1 dup key: { clinica_id: ObjectId('${clinica_id}'), cpf: "${cpf}" }`, "índice único parcial { clinica_id: 1, cpf: 1 }");
+    $("[data-err='cpf']").textContent = "Já existe paciente com este CPF nesta clínica (índice único)"; return;
+  }
+  DB.pacientes.push(doc); selPac = doc._id;
+  if (cpf && clinica_id === "65b000000000000000000001") bfAddItem("cpfs", cpf, { quiet: true });
+  mongoLog("mongoP", cmd, `{ acknowledged: true, insertedId: ObjectId("${doc._id}") }`, "paciente novo já nasce com os arrays documentos/agendamentos/odontogramas/mapas_faciais vazios");
+  $("#formPaciente").reset(); $("#novoPacienteCard").hidden = true; renderPacientes(); toast("Paciente cadastrado");
+}
+function addAlergia(ev) {
+  ev.preventDefault(); const v = $("#novaAlergia").value.trim(); if (!v) return;
+  const p = byId("pacientes", selPac); p.ficha = p.ficha || {}; p.ficha.anamnese = p.ficha.anamnese || {}; const arr = (p.ficha.anamnese.alergias = p.ficha.anamnese.alergias || []);
+  const novo = !arr.includes(v); if (novo) arr.push(v); p.atualizado_em = new Date().toISOString();
+  mongoLog("mongoP", `db.pacientes.updateOne(\n  { _id: ObjectId("${p._id}") },\n  { $addToSet: { "ficha.anamnese.alergias": "${v}" }, $set: { atualizado_em: new Date() } }\n)`, `{ acknowledged: true, matchedCount: 1, modifiedCount: ${novo ? 1 : 0} }`, novo ? "$addToSet só insere se ainda não estiver no array" : "já existia: $addToSet não duplica");
+  renderPacientes(); toast("Ranking A2.1 atualizado");
+}
+function pullAlergia(v) {
+  const p = byId("pacientes", selPac), arr = get(p, "ficha.anamnese.alergias") || [];
+  p.ficha.anamnese.alergias = arr.filter((a) => a !== v);
+  mongoLog("mongoP", `db.pacientes.updateOne(\n  { _id: ObjectId("${p._id}") },\n  { $pull: { "ficha.anamnese.alergias": "${v}" } }\n)`, `{ acknowledged: true, matchedCount: 1, modifiedCount: 1 }`);
+  renderPacientes();
+}
+
+/* ---------- Tela 3 ---------- */
+function fillTermoForm() {
+  const pSel = $("#tPaciente"), cur = pSel.value;
+  pSel.innerHTML = DB.pacientes.map((p) => `<option value="${p._id}">${esc(p.nome)}</option>`).join(""); if (cur && byId("pacientes", cur)) pSel.value = cur;
+  const procSel = $("#tProc"); if (!procSel.options.length) procSel.innerHTML = DB.procedimentos.filter((p) => p.modelo_documento_id).map((p) => `<option value="${p._id}">${esc(p.nome)}</option>`).join("");
+  const p = byId("pacientes", pSel.value), profSel = $("#tProf"), curProf = profSel.value;
+  profSel.innerHTML = DB.usuarios.filter((u) => u.cro && u.clinica_id === p.clinica_id).map((u) => `<option value="${u._id}">${esc(u.nome)} (CRO ${u.cro.uf} ${u.cro.numero})</option>`).join("");
+  if (curProf && [...profSel.options].some((o) => o.value === curProf)) profSel.value = curProf;
+  termoPreview();
+}
+function termoRender() {
+  const p = byId("pacientes", $("#tPaciente").value), proc = byId("procedimentos", $("#tProc").value), m = byId("modelos_documentos", proc.modelo_documento_id), u = byId("usuarios", $("#tProf").value);
+  const hoje = new Date().toLocaleDateString("pt-BR");
+  const vars = { "paciente.nome": p.nome, "paciente.cpf": p.cpf || "não informado", "profissional.nome": u ? u.nome : "—", "profissional.cro": u && u.cro ? `${u.cro.uf} ${u.cro.numero}` : "—",
+    "procedimento.dentes": $("#tDentes").value.trim() || "___", "produto.nome": $("#tProduto").value.trim() || "___", "produto.lote": $("#tLote").value.trim() || "___", "clinica.cidade": byId("clinicas", p.clinica_id).endereco.cidade, data: hoje };
+  return { p, proc, m, u, texto: m.conteudo.replace(/\{\{([^}]+)\}\}/g, (_, v) => vars[v] ?? `{{${v}}}`) };
+}
+function termoPreview() {
+  const { m, texto } = termoRender();
+  $("#tDentesF").hidden = !m.conteudo.includes("procedimento.dentes");
+  $("#tProdF").hidden = $("#tLoteF").hidden = !m.conteudo.includes("produto.");
+  $("#tPreview").textContent = texto;
+  $("#tModeloInfo").textContent = `Modelo: ${m.titulo} (versão ${m.versao}). Uma cópia (snapshot) vai junto com o termo.`;
+}
+function emitirTermo(ev) {
+  ev.preventDefault();
+  const { p, proc, m, u, texto } = termoRender();
+  if (!u) { toast("A clínica do paciente não tem dentista cadastrado"); return; }
+  const doc = { _id: newOid(), profissional_id: u._id, procedimento_id: proc._id, modelo: { id: m._id, titulo: m.titulo, versao: m.versao }, conteudo_renderizado: texto, status: "gerado", hash_sha256: hex(sha256(texto)), gerado_em: new Date().toISOString() };
+  p.documentos = p.documentos || []; p.documentos.push(doc); p.atualizado_em = new Date().toISOString();
+  const cl = byId("clinicas", p.clinica_id); cl.uso_mes.documentos_gerados++;
+  mongoLog("mongoD", `db.pacientes.updateOne(\n  { _id: ObjectId("${p._id}") },\n  { $push: { documentos: ${plain(doc).replace(/\n/g, "\n  ")} },\n    $set: { atualizado_em: new Date() } }\n)`, "{ acknowledged: true, matchedCount: 1, modifiedCount: 1 }", "o termo entra no array documentos[] do próprio paciente (snapshot do modelo + hash SHA-256 do texto)");
+  mongoLog("mongoD", `db.clinicas.updateOne({ _id: ObjectId("${cl._id}") }, { $inc: { "uso_mes.documentos_gerados": 1 } })`, "{ acknowledged: true, matchedCount: 1, modifiedCount: 1 }", "controle do limite do plano");
+  cmsIncr([["documento_gerado", 1], [`documento_gerado@${new Date().getHours()}h`, 1]], { quiet: true });
+  mongoLog("mongoD", `// Redis (estatística): CMS.INCRBY ${CMS_KEY} documento_gerado 1`, undefined);
+  renderDocumentos(); toast("Termo emitido · A2.2 atualizado");
+}
+function mudarStatus(pacId, docId, status) {
+  const p = byId("pacientes", pacId), d = p.documentos.find((x) => x._id === docId);
+  d.status = status; const set = { "documentos.$.status": status };
+  if (status === "assinado") { d.assinatura = { assinado_em: new Date().toISOString(), metodo: "presencial_tablet" }; set["documentos.$.assinatura"] = d.assinatura; }
+  mongoLog("mongoD", `db.pacientes.updateOne(\n  { _id: ObjectId("${pacId}"), "documentos._id": ObjectId("${docId}") },\n  { $set: ${plain(set).replace(/\n/g, "\n  ")} }\n)`, "{ acknowledged: true, matchedCount: 1, modifiedCount: 1 }", "o $ posicional aponta para o item do array que casou com documentos._id");
+  renderDocumentos();
+}
+function renderDocumentos() {
+  fillTermoForm();
+  const r1 = barsAlergias("#a21Bars");
+  $("#a21Info").textContent = `${r1.length} alergia(s) distinta(s) · resultado do pipeline executado agora sobre ${DB.pacientes.length} paciente(s).`;
+  const { result } = runPipeline("a22");
+  $("#a22Table").innerHTML = `<thead><tr><th>Status</th><th>Documento</th><th>Gerado em</th><th>Paciente</th><th>CPF</th><th>Telefone</th><th>Profissional</th><th>CRO</th><th>Ações</th></tr></thead><tbody>` +
+    (result.length ? result.map((r) => `<tr><td><span class="tag ${STATUS_TAG[r.status_documento]}">${r.status_documento}</span></td><td>${esc(r.documento.replace("Termo de Consentimento — ", ""))}</td><td style="white-space:nowrap">${fmtDT(r.data_geracao)}</td><td>${esc(r.paciente_nome)}</td><td style="white-space:nowrap">${esc(r.paciente_cpf)}</td><td style="white-space:nowrap">${esc(r.paciente_telefone)}</td><td>${esc(r.profissional)}</td><td style="white-space:nowrap">${esc(r.cro ?? "—")}</td>
+      <td style="white-space:nowrap">${r.status_documento === "gerado" ? `<button class="btn sm" type="button" data-st="enviado" data-p="${r._pac}" data-d="${r._doc}">Enviar</button> ` : ""}${r.status_documento !== "assinado" ? `<button class="btn sm primary" type="button" data-st="assinado" data-p="${r._pac}" data-d="${r._doc}">Assinar</button>` : '<span class="small dim">—</span>'}</td></tr>`).join("") : `<tr><td colspan="9"><div class="empty">Nenhum documento.</div></td></tr>`) + "</tbody>";
+  renderPipe("a21"); renderPipe("a22");
+}
+
+/* ---------------------------- eventos ---------------------------- */
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.go) go(b.dataset.go);
+  if (b.dataset.sub) subGo(b.dataset.sub);
+  if (b.dataset.pac) { selPac = b.dataset.pac; renderPacientes(); if (innerWidth < 980) $("#detalhe").scrollIntoView({ behavior: "smooth" }); }
+  if (b.dataset.pull) pullAlergia(b.dataset.pull);
+  if (b.dataset.st) mudarStatus(b.dataset.p, b.dataset.d, b.dataset.st);
+  if (b.dataset.clear) document.getElementById(b.dataset.clear).innerHTML = "";
+  if (b.dataset.pipe) { const box = document.getElementById("pipe-" + b.dataset.pipe); box.classList.toggle("open"); b.textContent = box.classList.contains("open") ? "Ocultar pipeline" : "Ver pipeline MongoDB"; renderPipe(b.dataset.pipe); if (box.classList.contains("open")) box.scrollIntoView({ behavior: "smooth", block: "start" }); }
+  if (b.dataset.time) { R.offset += Number(b.dataset.time) * 1000; cmt("termLogin", `\n# ⏱ relógio do Redis adiantado ${fmtTTL(Number(b.dataset.time))}; chaves com TTL vencido somem`, "hdr"); refreshKeys(); refreshSession(); }
+  if (b.dataset.key) { const T = "termLogin", kk = b.dataset.key, x = R.e(kk); if (!x) return; cmt(T, `\n### conteúdo de ${kk}`, "hdr"); rcmd(T, [x.type === "hash" ? "HGETALL" : x.type === "set" ? "SMEMBERS" : "GET", kk]); rcmd(T, ["TTL", kk]); }
+  if (b.dataset.mode) {
+    MODE = b.dataset.mode; $$(".mode button").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.mode === MODE)));
+    [BF.emails, BF.cpfs, CMS_KEY].forEach((kk) => R.exec(["DEL", kk])); bfCount.emails = bfCount.cpfs = 0; Object.keys(cmsExato).forEach((k2) => delete cmsExato[k2]);
+    ["termBloom", "termCms"].forEach((t) => cmt(t, `\n# modo trocado para ${MODE === "nativo" ? "RedisBloom nativo (BF.*/CMS.*)" : "sem módulo (SETBIT/GETBIT e HINCRBY/HMGET)"}: filtros e contadores recriados`, "hdr"));
+    seedBloom(); bfStats(); renderCms(); toast(MODE === "nativo" ? "Usando BF.* e CMS.*" : "Usando SETBIT/GETBIT e HINCRBY");
+  }
+  const qk = b.dataset.quick;
+  if (qk === "novo-paciente") { go("pacientes"); $("#novoPacienteCard").hidden = false; $("#fNome").focus(); }
+  if (qk === "emitir") { go("documentos"); $("#emitirCard").scrollIntoView({ behavior: "smooth" }); }
+  if (qk === "pipelines") { go("documentos"); ["a21", "a22"].forEach((p) => { const box = document.getElementById("pipe-" + p); if (!box.classList.contains("open")) $(`[data-pipe="${p}"]`).click(); }); }
+  if (qk === "bloom") go("redis", "bloom");
+  if (qk === "login") go("redis", "login");
+  if (b.id === "dashLogin") { $("#lEmail").value = "mayra@sorrisopleno.com.br"; login("mayra@sorrisopleno.com.br", SENHA_DEMO).then(renderDashboard); }
+  if (b.id === "dashLogout") { logout(); renderDashboard(); }
+});
+$("#bLogin").onclick = () => login($("#lEmail").value, $("#lSenha").value);
+$("#bReq").onclick = requisicao; $("#bLogout").onclick = logout; $("#bInval").onclick = invalidar;
+$("#bFlush").onclick = () => { const ks = R.keys("consentio:").filter((x) => !x.startsWith("consentio:stats:")); if (!ks.length) return; cmt("termLogin", "\n### limpa só as chaves de login (nunca FLUSHALL)", "hdr"); rcmd("termLogin", ["DEL", ...ks]); token = null; refreshKeys(); refreshSession(); };
+$("#bfCheck").onclick = bfCheckUI; $("#bfAdd").onclick = bfAddUI; $("#bfBulk").onclick = bfBulkUI; $("#bfFp").onclick = bfFpUI;
+$("#bfKey").onchange = () => { $("#bfItem").value = $("#bfKey").value === "emails" ? "mayra@sorrisopleno.com.br" : "123.456.789-09"; $("#bfBits").innerHTML = ""; $("#bfVerdict").innerHTML = ""; bfStats(); };
+$("#hAdd").onclick = hllAddUI; $("#hSim").onclick = hllSimUI; $("#hMerge").onclick = hllMergeUI; $("#hBig").onclick = hllBigUI;
+$("#cSim").onclick = cmsSimUI;
+$("#cDim").onchange = () => { [cmsW, cmsD] = $("#cDim").value.split("x").map(Number); cmsReset(); cmt("termCms", `\n### nova matriz ${cmsD} × ${cmsW}: chave recriada`, "hdr"); cmsEnsure(); renderCms(); };
+$("#busca").oninput = () => { renderPacientes(); const q = $("#busca").value.trim(); clearTimeout(window._bt); window._bt = setTimeout(() => q && mongoLog("mongoP", `db.pacientes.find({ $text: { $search: "${q}" } }, { nome: 1, cpf: 1 })`, `${DB.pacientes.filter((p) => p.nome.toLowerCase().includes(q.toLowerCase())).length} documento(s)`, "busca pelo índice de texto { nome: \"text\" } (português)"), 600); };
+$("#btnNovoPaciente").onclick = () => { $("#novoPacienteCard").hidden = false; $("#fNome").focus(); };
+$("#btnFecharNovo").onclick = () => { $("#novoPacienteCard").hidden = true; };
+$("#formPaciente").onsubmit = salvarPaciente;
+document.addEventListener("submit", (e) => { if (e.target.id === "formAlergia") addAlergia(e); });
+$("#formTermo").onsubmit = emitirTermo;
+["#tPaciente", "#tProc", "#tProf"].forEach((s) => ($(s).onchange = () => { if (s === "#tPaciente") fillTermoForm(); else termoPreview(); }));
+["#tDentes", "#tProduto", "#tLote"].forEach((s) => ($(s).oninput = termoPreview));
+$("#btnReset").onclick = () => { DB = clone(SEED); selPac = "65d000000000000000000001"; render(currentTab()); toast("Dados restaurados (iguais ao script 02)"); };
+$("#btnTheme").onclick = () => { const r = document.documentElement, dark = r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; r.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("consentio-tema", r.dataset.theme); } catch (e) {} };
+const currentTab = () => $("section[data-tab].active").dataset.tab;
+
+/* ---------------------------- inicialização ---------------------------- */
+function seedBloom() {
+  cmt("termBloom", "# carga inicial: e-mails e CPFs que já estão no MongoDB entram nos filtros");
+  bfEnsure("emails"); bfEnsure("cpfs");
+  const emails = DB.usuarios.map((u) => u.email), cpfs = DB.pacientes.filter((p) => p.cpf && p.clinica_id === "65b000000000000000000001").map((p) => p.cpf);
+  if (MODE === "nativo") { rcmd("termBloom", ["BF.MADD", BF.emails, ...emails]); rcmd("termBloom", ["BF.MADD", BF.cpfs, ...cpfs]); emails.forEach(() => bfCount.emails++); cpfs.forEach(() => bfCount.cpfs++); }
+  else { emails.forEach((e) => bfAddItem("emails", e, { quiet: true })); cpfs.forEach((c) => bfAddItem("cpfs", c, { quiet: true })); termWrite("termBloom", `<span class="cmd">SETBIT ${BF.emails} &lt;posição&gt; 1   (7 bits × ${emails.length} e-mails)</span>\n<span class="cmd">SETBIT ${BF.cpfs} &lt;posição&gt; 1   (7 bits × ${cpfs.length} CPFs)</span>`); }
+}
+(function init() {
+  try { const t = localStorage.getItem("consentio-tema"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  $("#lEmail").innerHTML = DB.usuarios.map((u) => `<option value="${u.email}">${esc(u.email)} (${u.papel})</option>`).join("") + `<option value="naoexiste@clinica.com.br">naoexiste@clinica.com.br (inexistente)</option>`;
+  $("#fClinica").innerHTML = DB.clinicas.map((c) => `<option value="${c._id}">${esc(c.nome)}</option>`).join("");
+  $("#hDia").innerHTML = DIAS.map((d) => `<option value="${d}" ${d === DIAS[DIAS.length - 1] ? "selected" : ""}>${fmtD(d + "T12:00:00Z")}</option>`).join("");
+  $("#cHora").innerHTML = Array.from({ length: 13 }, (_, i) => i + 7).map((h) => `<option value="${h}" ${h === 11 ? "selected" : ""}>${h}h</option>`).join("");
+  $("#cBtns").innerHTML = Object.keys(ACOES).map((a) => `<button class="btn sm" type="button" data-acao="${a}">+ ${a}</button>`).join("");
+  $("#cBtns").onclick = (e) => { const b = e.target.closest("[data-acao]"); if (b) cmsEventUI(b.dataset.acao); };
+  cmt("termLogin", "# Cache de login: escolha um usuário e clique em Entrar.\n# 1º login = CACHE MISS (vai ao MongoDB) · 2º login = CACHE HIT (só Redis)");
+  cmt("termHll", "# HyperLogLog: PFADD adiciona, PFCOUNT estima os únicos, PFMERGE une dias.");
+  cmt("termCms", "# Count-Min Sketch: cada clique é um evento do sistema.");
+  seedBloom(); cmsEnsure();
+  mongoLog("mongoP", 'use consentio', "switched to db consentio");
+  mongoLog("mongoD", 'use consentio', "switched to db consentio");
+  setInterval(() => { refreshSession(); if (currentTab() === "redis") refreshKeys(); }, 1000);
+  const [tab, sub] = (location.hash.slice(1) || "dashboard").split("/");
+  go(TITULOS[tab] ? tab : "dashboard", sub);
+})();
+</script>
+</body>
+</html>

@@ -12,6 +12,9 @@
 //
 // Padrão: cache-aside (a aplicação olha o Redis primeiro; se não achar,
 // busca no MongoDB e grava no Redis com TTL).
+//
+// Visualização: docs/index.html → aba "Redis" → "(a) Cache de login"
+// executa este mesmo fluxo, mostrando cada comando no redis-cli.
 // =====================================================================
 const crypto = require("crypto");
 const { conferirSenha } = require("./senha");

@@ -9,6 +9,10 @@
 // (Redis Stack, Redis Cloud, Redis 8). Sem o módulo, usam uma
 // implementação própria, com o MESMO algoritmo, só com comandos básicos
 // (SETBIT/GETBIT e HINCRBY). A interface é igual nos dois modos.
+//
+// Visualização: docs/index.html → aba "Redis" → (b) Bloom, (c) HyperLogLog
+// e (d) Count-Min Sketch usam o mesmo SHA-256 + double hashing deste
+// arquivo; o teste de falso positivo dá os mesmos 108 (1,08%) do demo.
 // =====================================================================
 const crypto = require("crypto");
 

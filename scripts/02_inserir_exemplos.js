@@ -104,29 +104,31 @@ app.clinicas.insertMany([
 ]);
 
 // ---------------- usuários ----------------
+// senha_hash = scrypt da senha de demonstração "Consentio@2026" (formato scrypt$<salt>$<hash>,
+// o mesmo conferido por redis/src/senha.js no cache de login). Nunca a senha em texto.
 app.usuarios.insertMany([
   {
     _id: id.dra_mayra, clinica_id: id.clinica_sorriso, nome: "Dra. Mayra Oliveira",
-    email: "mayra@sorrisopleno.com.br", senha_hash: "$2b$12$exemploHashBcryptNaoUsarEmProducao000000000000",
+    email: "mayra@sorrisopleno.com.br", senha_hash: "scrypt$c0ffee00000000000000000000000000$e04903ce8b5d5356078cc783a0fbbad155781096c186b7b161bfca00acd9c88dce03c0f1967ffd065205f0497f5895b9e1060f6a3a91d0954828f4f2012b1561",
     papel: "administrador", cro: { numero: "45678", uf: "MG" },
     especialidades: ["harmonizacao_orofacial", "clinica_geral"],
     ativo: true, ultimo_login: ISODate("2026-11-03T11:02:00Z"), criado_em: ISODate("2026-08-01T12:05:00Z"),
   },
   {
     _id: id.dr_lucas, clinica_id: id.clinica_sorriso, nome: "Dr. Lucas Ferreira",
-    email: "lucas@sorrisopleno.com.br", senha_hash: "$2b$12$exemploHashBcryptNaoUsarEmProducao111111111111",
+    email: "lucas@sorrisopleno.com.br", senha_hash: "scrypt$c0ffee10000000000000000000000000$28633f07232fe6aff69d3ce473db88b00975830fb31278d77dea53c5f8167ae143cfcc7794ece4734faf03113117140a848d96f5b740c3460028b2bfb60b801b",
     papel: "dentista", cro: { numero: "51234", uf: "MG" }, especialidades: ["endodontia", "cirurgia"],
     ativo: true, ultimo_login: ISODate("2026-11-02T19:40:00Z"), criado_em: ISODate("2026-08-03T14:00:00Z"),
   },
   {
     _id: id.sec_julia, clinica_id: id.clinica_sorriso, nome: "Júlia Martins",
-    email: "recepcao@sorrisopleno.com.br", senha_hash: "$2b$12$exemploHashBcryptNaoUsarEmProducao222222222222",
+    email: "recepcao@sorrisopleno.com.br", senha_hash: "scrypt$c0ffee20000000000000000000000000$789b60f0d1ce9c8dadef3c91d9a863fd882dfa346f688f8e859b5faded83bb919466d018f2df618ba96d274187469ca869079fd147c135b3fd0e261c5b58a139",
     papel: "secretaria", ativo: true, ultimo_login: ISODate("2026-11-03T10:55:00Z"),
     criado_em: ISODate("2026-08-05T09:00:00Z"),
   },
   {
     _id: id.dra_paula, clinica_id: id.clinica_harmonia, nome: "Dra. Paula Lima",
-    email: "paula.lima.odonto@email.com", senha_hash: "$2b$12$exemploHashBcryptNaoUsarEmProducao333333333333",
+    email: "paula.lima.odonto@email.com", senha_hash: "scrypt$c0ffee30000000000000000000000000$c9e91cb98e90a573b08a6ff080440d6845e76e6d6f129c9ad203343027209916a3abdfec72a1dbb8706c7795b7a0dab516636742d3de641b82139e4c1f90d525",
     papel: "administrador", cro: { numero: "60321", uf: "MG" }, especialidades: ["dentistica"],
     ativo: true, ultimo_login: null, criado_em: ISODate("2026-10-25T18:30:00Z"),
   },
